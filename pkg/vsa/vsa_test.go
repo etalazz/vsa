@@ -77,12 +77,15 @@ func TestVSA_Basics(t *testing.T) {
 }
 
 func TestVSA_CommitWorkflow(t *testing.T) {
-	v := New(1000)
+	// Testing the e-commerce/ticketing use case:
+	// Scalar = total inventory, Vector = items in carts (reserved)
+	// Available = Scalar - |Vector|
+	v := New(1000) // Start with 1000 items in inventory
 	threshold := int64(50)
 
-	// 1. Update until just under the threshold
-	v.Update(30)
-	v.Update(19)
+	// 1. Update until just under the threshold (customers adding items to cart)
+	v.Update(30) // 30 items reserved
+	v.Update(19) // 49 items reserved total
 
 	shouldCommit, vectorToCommit := v.CheckCommit(threshold)
 	if shouldCommit {
@@ -90,7 +93,7 @@ func TestVSA_CommitWorkflow(t *testing.T) {
 	}
 
 	// 2. Update to meet and exceed the threshold
-	v.Update(1) // vector is now 50
+	v.Update(1) // vector is now 50 (threshold met)
 	shouldCommit, vectorToCommit = v.CheckCommit(threshold)
 	if !shouldCommit {
 		t.Error("CheckCommit() returned false when threshold was met")
@@ -99,13 +102,14 @@ func TestVSA_CommitWorkflow(t *testing.T) {
 		t.Errorf("CheckCommit() returned vector %d, want 50", vectorToCommit)
 	}
 
-	// 3. Simulate a successful commit
+	// 3. Simulate a successful commit (50 items sold/removed from inventory)
 	v.Commit(vectorToCommit)
 
 	// 4. Verify the state is correct after commit
+	// Scalar should be reduced: S_new = S_old - A_net = 1000 - 50 = 950
 	scalar, vector := v.State()
-	if scalar != 1050 {
-		t.Errorf("After commit, scalar is %d, want 1050", scalar)
+	if scalar != 950 {
+		t.Errorf("After commit, scalar is %d, want 950", scalar)
 	}
 	if vector != 0 {
 		t.Errorf("After commit, vector is %d, want 0", vector)
@@ -113,8 +117,8 @@ func TestVSA_CommitWorkflow(t *testing.T) {
 
 	// 5. Verify available resources is correct
 	available := v.Available()
-	if available != 1050 {
-		t.Errorf("After commit, available is %d, want 1050", available)
+	if available != 950 {
+		t.Errorf("After commit, available is %d, want 950", available)
 	}
 }
 

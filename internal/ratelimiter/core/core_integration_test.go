@@ -57,7 +57,7 @@ func (p *mockCountingPersister) getStats() (commitCalls, totalCommits int, total
 func TestIntegration_CommitReduction(t *testing.T) {
 	// 1. Setup
 	persister := &mockCountingPersister{}
-	store := NewStore()
+	store := NewStore(10000) // Initialize with high rate limit
 
 	// Use aggressive timings for the test to run quickly
 	commitThreshold := int64(50)

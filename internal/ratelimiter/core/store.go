@@ -35,19 +35,25 @@ type managedVSA struct {
 // Store manages a collection of VSA instances in memory.
 // It is thread-safe and designed for high-performance concurrent access.
 type Store struct {
-	counters sync.Map
+	counters      sync.Map
+	initialScalar int64 // The rate limit value to initialize new VSAs with
 }
 
 // NewStore creates and initializes a new VSA store.
-func NewStore() *Store {
-	return &Store{}
+// The initialScalar parameter sets the starting scalar value for new VSA instances,
+// which should be the rate limit (total allowed requests).
+func NewStore(initialScalar int64) *Store {
+	return &Store{
+		initialScalar: initialScalar,
+	}
 }
 
 // GetOrCreate returns the VSA instance for a given key.
 // It also updates the lastAccessed timestamp for the instance.
 func (s *Store) GetOrCreate(key string) *vsa.VSA {
 	// In a real system, you would fetch the initial scalar from a database here.
-	newVSA := &managedVSA{instance: vsa.New(0), lastAccessed: time.Now()}
+	// For the rate limiter, the scalar is the rate limit (total allowed requests).
+	newVSA := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: time.Now()}
 
 	actual, _ := s.counters.LoadOrStore(key, newVSA)
 	managed := actual.(*managedVSA)

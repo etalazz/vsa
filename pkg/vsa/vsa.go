@@ -87,10 +87,11 @@ func (v *VSA) CheckCommit(threshold int64) (shouldCommit bool, vectorToCommit in
 // The caller is responsible for persisting the change to a database. After the database
 // write succeeds, this function should be called with the exact vector value that was committed.
 // It moves the committed value from the volatile vector to the stable scalar.
+// Per the VSA algorithm: S_new = S_old - A_net, then A_net = 0
 func (v *VSA) Commit(committedVector int64) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.scalar += committedVector
+	v.scalar -= committedVector
 	v.vector -= committedVector
 }
 

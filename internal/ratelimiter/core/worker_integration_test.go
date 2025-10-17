@@ -56,19 +56,19 @@ func (r *recordingPersister) flatten() []Commit {
 }
 
 func TestWorker_RunCommitCycle_Integration(t *testing.T) {
-	store := NewStore()
+	store := NewStore(100) // Initialize with 100 as available resources
 
-	// Prepare some VSAs with different vectors
+	// Prepare some VSAs with different vectors (representing reserved resources)
 	a := store.GetOrCreate("a")
 	b := store.GetOrCreate("b")
 	c := store.GetOrCreate("c")
 
-	// Set initial scalars to 0 and vectors to desired values via Update
+	// Reserve resources via Update
 	// We'll use a low threshold to keep this fast
-	for i := 0; i < 3; i++ { // vector=3 for a
+	for i := 0; i < 3; i++ { // vector=3 for a (3 reserved)
 		a.Update(1)
 	}
-	for i := 0; i < 5; i++ { // vector=5 for b
+	for i := 0; i < 5; i++ { // vector=5 for b (5 reserved)
 		b.Update(1)
 	}
 	for i := 0; i < 2; i++ { // vector=2 for c (below threshold)
@@ -111,19 +111,23 @@ func TestWorker_RunCommitCycle_Integration(t *testing.T) {
 	}
 
 	// After successful persistence, Worker should have called VSA.Commit for each.
-	if s, v := a.State(); s != 3 || v != 0 {
-		t.Fatalf("after commit for a, expected (scalar=3, vector=0), got (%d,%d)", s, v)
+	// Per VSA algorithm: S_new = S_old - A_net
+	// For a: S_new = 100 - 3 = 97, vector = 0
+	if s, v := a.State(); s != 97 || v != 0 {
+		t.Fatalf("after commit for a, expected (scalar=97, vector=0), got (%d,%d)", s, v)
 	}
-	if s, v := b.State(); s != 5 || v != 0 {
-		t.Fatalf("after commit for b, expected (scalar=5, vector=0), got (%d,%d)", s, v)
+	// For b: S_new = 100 - 5 = 95, vector = 0
+	if s, v := b.State(); s != 95 || v != 0 {
+		t.Fatalf("after commit for b, expected (scalar=95, vector=0), got (%d,%d)", s, v)
 	}
-	if s, v := c.State(); s != 0 || v != 2 {
-		t.Fatalf("for c (no commit expected), expected (scalar=0, vector=2), got (%d,%d)", s, v)
+	// For c: no commit, so scalar stays 100, vector stays 2
+	if s, v := c.State(); s != 100 || v != 2 {
+		t.Fatalf("for c (no commit expected), expected (scalar=100, vector=2), got (%d,%d)", s, v)
 	}
 }
 
 func TestWorker_RunEvictionCycle_Integration(t *testing.T) {
-	store := NewStore()
+	store := NewStore(100)
 	rp := &recordingPersister{}
 	// Make eviction aggressive for test
 	evictionAge := 10 * time.Millisecond

@@ -48,13 +48,15 @@ import (
 func main() {
 	// 1. Initialize all the core components.
 	// In a real app, the persister would be a real database client.
+	// In a real app, these values would come from a config file or env vars.
+	rateLimit := int64(1000) // Rate limit of 1000 requests
+
 	persister := core.NewMockPersister()
-	store := core.NewStore()
+	store := core.NewStore(rateLimit) // Initialize with rate limit as scalar
 
 	// 2. Create and start the background worker.
 	// The worker handles the critical tasks of committing VSA vectors to persistent
 	// storage and evicting old instances from memory.
-	// In a real app, these values would come from a config file or env vars.
 	worker := core.NewWorker(
 		store,
 		persister,
@@ -68,8 +70,7 @@ func main() {
 	// 3. Create the API server.
 	// The server handles the incoming HTTP requests and uses the store to
 	// perform the rate-limiting checks.
-	// In a real app, this value would come from a config file or env vars.
-	apiServer := api.NewServer(store, 1000) // Rate limit of 1000
+	apiServer := api.NewServer(store, rateLimit)
 
 	// 4. Set up the HTTP server and routes.
 	// Using the ListenAndServe method from the api.Server is not ideal for graceful

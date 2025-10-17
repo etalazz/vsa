@@ -54,7 +54,7 @@ func BenchmarkVSA_Update_Concurrent(b *testing.B) {
 // method when accessed concurrently by many goroutines for different keys. This simulates
 // a real-world server handling requests for many different users simultaneously.
 func BenchmarkStore_GetOrCreate_Concurrent(b *testing.B) {
-	store := core.NewStore()
+	store := core.NewStore(1000)
 	// Create a pool of keys to simulate different users.
 	numKeys := 1000
 	keys := make([]string, numKeys)

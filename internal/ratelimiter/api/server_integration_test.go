@@ -30,10 +30,9 @@ import (
 
 // TestServer_CheckEndpoint_Integration validates the end-to-end behavior of the /check endpoint.
 func TestServer_CheckEndpoint_Integration(t *testing.T) {
-	store := core.NewStore()
-
 	// Create the server with a low rate limit for testing purposes.
 	const testRateLimit = 3
+	store := core.NewStore(testRateLimit) // Initialize with rate limit as scalar
 	srv := NewServer(store, testRateLimit)
 
 	mux := http.NewServeMux()
