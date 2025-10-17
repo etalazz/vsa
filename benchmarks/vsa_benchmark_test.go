@@ -114,7 +114,7 @@ This comparison reveals a critical engineering trade-off.
   it is the undisputed champion. It is the "speed of light" for in-memory counting.
 
 - **Why is the VSA still the better architecture for this problem?** Because the VSA is not
-  *just* a counter; it is a complete pattern for managing state persistence. The tiny
+  just a counter; it is a complete pattern for managing state persistence. The tiny
   amount of overhead introduced by the mutex buys an enormous architectural advantage:
   the **explicit separation of the `scalar` (committed) and `vector` (uncommitted) state**.
 

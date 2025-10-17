@@ -163,3 +163,17 @@ This pattern directly addresses the VSA's most significant trade-off: the intent
 -   **Why it's Ideal**: This composition provides the best of both worlds: the VSA delivers lightning-fast reads and protects the database from write contention, while the durable log guarantees that no information is ever lost. If the VSA service crashes, its state can be perfectly reconstructed by replaying the log.
 
 By combining these patterns, the VSA is elevated from a clever algorithm to a cornerstone of a high-performance, scalable, and resilient system architecture.
+
+## 10. Reference Implementation: A High-Performance Rate Limiter
+
+To demonstrate the power and practicality of the VSA pattern, this project includes a complete, production-ready implementation of a high-throughput API rate-limiting service. This demo application, located in the `cmd/ratelimiter-api` directory, serves as a canonical example of how to use the core VSA library to solve a real-world business problem.
+
+The rate limiter showcases how the VSA's I/O reduction translates directly into a service that is faster, more reliable, and cheaper to operate at scale than traditional solutions.
+
+### The VSA's Unique Value Proposition
+
+When building high-throughput counters, developers are typically forced into a painful trade-off between performance and durability. The VSA architecture is designed to break this trade-off.
+
+> Existing solutions force a painful choice: you can either have stateless, in-memory limiters that are fast but not durable, or you can have stateful, Redis-backed limiters that are durable but slow and expensive due to network I/O.
+>
+> Our VSA architecture is the only solution that offers the best of both worlds: the extreme speed of in-memory processing combined with the durability of a persistent backend, all while reducing database traffic.
