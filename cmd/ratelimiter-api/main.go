@@ -46,6 +46,36 @@ import (
 )
 
 func main() {
+	// --- What this is ---
+	// Hi! This demo runs a super-fast, in-memory rate limiter built on the VSA (Vector–Scalar Accumulator).
+	// Think of it like this:
+	//   - Scalar (S): the stable budget you start with per user (e.g., 1000 requests).
+	//   - Vector (V): the in-memory "tab" of what’s been used but not yet saved to storage.
+	//   - Available = S - |V|
+	// We admit requests in nanoseconds by updating V in memory, and a background worker occasionally
+	// batches the net change to storage. That means thousands of requests can turn into only a handful
+	// of writes (95–99% fewer), which keeps your database and wallet happy.
+	//
+	// Why it’s beneficial:
+	//   - Zero per-request network I/O on the hot path → predictable low latency.
+	//   - Big I/O reduction → far fewer writes than “write on every request”.
+	//   - Fairness under load → we atomically check-and-consume the last token (no overshoot race).
+	//   - Clean lifecycle → on shutdown we do a final flush so sub-threshold remainders aren’t lost.
+	//
+	// How to try it quickly:
+	//   1) In this terminal, run the server (you’re doing that right now).
+	//   2) In another terminal with Bash (Git Bash/WSL), run the client script:
+	//        ./scripts/test_ratelimiter.sh
+	//      You’ll see:
+	//        - The client hits /check until Alice reaches the limit (429 on the 1001st request).
+	//        - The server prints periodic "Persisting batch... VECTOR: 50/51" lines (batched commits).
+	//        - On Ctrl+C (shutdown), it prints a final flush, e.g. bob-key: 1 if Bob never hit threshold.
+	//
+	// Tip: If you just want to poke it manually, try:
+	//   curl "http://localhost:8080/check?api_key=alice-key"
+	//
+	// Enjoy the demo!
+
 	// 1. Initialize all the core components.
 	// In a real app, the persister would be a real database client.
 	// In a real app, these values would come from a config file or env vars.
