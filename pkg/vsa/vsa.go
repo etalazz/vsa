@@ -95,6 +95,20 @@ func (v *VSA) Commit(committedVector int64) {
 	v.vector -= committedVector
 }
 
+// TryConsume atomically checks whether at least n units are available and, if so,
+// consumes them by incrementing the volatile vector. This prevents an oversubscription
+// race under high concurrency where multiple goroutines could observe the same
+// positive availability and all proceed. Returns true if the consume succeeded.
+func (v *VSA) TryConsume(n int64) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.scalar-abs(v.vector) >= n {
+		v.vector += n
+		return true
+	}
+	return false
+}
+
 // abs is a helper for calculating the absolute value of an int64.
 func abs(n int64) int64 {
 	if n < 0 {

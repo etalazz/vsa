@@ -63,14 +63,8 @@ func (s *Server) handleCheckRateLimit(w http.ResponseWriter, r *http.Request) {
 	// This is an extremely fast, in-memory operation.
 	userVSA := s.store.GetOrCreate(key)
 
-	// 3. Check if the user has available requests remaining.
-	// We check the limit *before* the update.
-	// Per VSA algorithm: Available = Scalar - |Vector|
-	// Scalar represents the total allowed requests (rate limit)
-	// Vector represents requests consumed but not yet committed to persistence
-	// Available tells us how many requests can still be made
-	available := userVSA.Available()
-	if available <= 0 {
+	// 3. Atomically check-and-consume 1 unit to avoid oversubscription under concurrency.
+	if !userVSA.TryConsume(1) {
 		w.Header().Set("X-RateLimit-Status", "Exceeded")
 		// Adding a Retry-After header is a good practice for rate limiting.
 		w.Header().Set("Retry-After", "60") // Retry after 60 seconds
@@ -78,14 +72,13 @@ func (s *Server) handleCheckRateLimit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. If the user is within their limit, update the counter. This is a fast,
-	// in-memory operation that increments the vector (consuming one request).
-	userVSA.Update(1)
+	// 4. Success: compute remaining after consumption for accurate headers.
+	remaining := userVSA.Available()
 
 	// 5. Return a successful response.
 	// Add headers to give the client visibility into their current limit status.
 	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", s.rateLimit))
-	w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", available-1))
+	w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 	w.Header().Set("X-RateLimit-Status", "OK")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "OK")
