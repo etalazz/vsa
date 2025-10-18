@@ -14,9 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package vsa provides a thread-safe, in-memory implementation of the
-// Vector-Scalar Accumulator (VSA) architectural pattern. It is designed to
-// efficiently track the state of volatile resource counters.
+// Package api contains integration tests for the public HTTP server behavior.
+// It validates headers and enforcement semantics for the /check endpoint.
 
 package api
 

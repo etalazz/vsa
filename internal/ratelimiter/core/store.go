@@ -20,16 +20,18 @@ package core
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"vsa/pkg/vsa" // Import your core VSA library
+	"vsa/pkg/vsa"
 )
 
 // managedVSA is a wrapper around a VSA instance that includes metadata
 // required for managing its lifecycle, like its last access time.
 type managedVSA struct {
 	instance     *vsa.VSA
-	lastAccessed time.Time
+	// lastAccessed stores the last access time in UnixNano to allow atomic access across goroutines.
+	lastAccessed int64
 }
 
 // Store manages a collection of VSA instances in memory.
@@ -53,13 +55,13 @@ func NewStore(initialScalar int64) *Store {
 func (s *Store) GetOrCreate(key string) *vsa.VSA {
 	// In a real system, you would fetch the initial scalar from a database here.
 	// For the rate limiter, the scalar is the rate limit (total allowed requests).
-	newVSA := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: time.Now()}
+ newVSA := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: time.Now().UnixNano()}
 
 	actual, _ := s.counters.LoadOrStore(key, newVSA)
 	managed := actual.(*managedVSA)
 
 	// Update the last accessed time on every access.
-	managed.lastAccessed = time.Now()
+	atomic.StoreInt64(&managed.lastAccessed, time.Now().UnixNano())
 
 	return managed.instance
 }

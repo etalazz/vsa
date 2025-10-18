@@ -14,9 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package vsa provides a thread-safe, in-memory implementation of the
-// Vector-Scalar Accumulator (VSA) architectural pattern. It is designed to
-// efficiently track the state of volatile resource counters.
+// Package core contains integration tests for the rate limiter core components.
+// It validates I/O reduction via batched commits and VSA correctness end-to-end.
 
 // internal/ratelimiter/core/core_integration_test.go
 package core

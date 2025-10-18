@@ -21,6 +21,8 @@ package core
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"vsa/pkg/vsa"
@@ -36,6 +38,8 @@ type Worker struct {
 	evictionAge      time.Duration
 	evictionInterval time.Duration
 	stopChan         chan struct{}
+	wg               sync.WaitGroup
+	stopped          uint32
 }
 
 // NewWorker creates and configures a new background worker.
@@ -54,14 +58,25 @@ func NewWorker(store *Store, persister Persister, commitThreshold int64, commitI
 // Start launches the background goroutines for the worker.
 func (w *Worker) Start() {
 	fmt.Println("Starting background worker...")
-	go w.commitLoop()
-	go w.evictionLoop()
+	w.wg.Add(2)
+	go func() {
+		defer w.wg.Done()
+		w.commitLoop()
+	}()
+	go func() {
+		defer w.wg.Done()
+		w.evictionLoop()
+	}()
 }
 
 // Stop gracefully stops the background worker.
 func (w *Worker) Stop() {
+	if !atomic.CompareAndSwapUint32(&w.stopped, 0, 1) {
+		return
+	}
 	fmt.Println("Stopping background worker...")
 	close(w.stopChan)
+	w.wg.Wait()
 }
 
 // commitLoop periodically checks for and persists VSA instances that have
@@ -75,8 +90,8 @@ func (w *Worker) commitLoop() {
 		case <-ticker.C:
 			w.runCommitCycle()
 		case <-w.stopChan:
-			// On stop, run one final commit cycle to flush everything.
-			w.runCommitCycle()
+			// On stop, perform a final flush committing all non-zero vectors (including sub-threshold remainders).
+			w.runFinalFlush()
 			return
 		}
 	}
@@ -115,6 +130,34 @@ func (w *Worker) runCommitCycle() {
 	}
 }
 
+// runFinalFlush commits any non-zero vectors regardless of threshold. It is intended for shutdown.
+func (w *Worker) runFinalFlush() {
+	var commits []Commit
+	var vsaToCommit []*vsa.VSA
+	var vectorsToCommit []int64
+
+	w.store.ForEach(func(key string, v *managedVSA) {
+		_, vector := v.instance.State()
+		if vector != 0 {
+			commits = append(commits, Commit{Key: key, Vector: vector})
+			vsaToCommit = append(vsaToCommit, v.instance)
+			vectorsToCommit = append(vectorsToCommit, vector)
+		}
+	})
+
+	if len(commits) == 0 {
+		return
+	}
+
+	if err := w.persister.CommitBatch(commits); err != nil {
+		fmt.Printf("ERROR: Failed to commit final batch: %v\n", err)
+		return
+	}
+	for i := range vsaToCommit {
+		vsaToCommit[i].Commit(vectorsToCommit[i])
+	}
+}
+
 // evictionLoop periodically removes old, unused VSA instances from memory.
 func (w *Worker) evictionLoop() {
 	ticker := time.NewTicker(w.evictionInterval)
@@ -135,8 +178,9 @@ func (w *Worker) runEvictionCycle() {
 	var keysToEvict []string
 	now := time.Now()
 
-	w.store.ForEach(func(key string, v *managedVSA) {
-		if now.Sub(v.lastAccessed) > w.evictionAge {
+ w.store.ForEach(func(key string, v *managedVSA) {
+		last := atomic.LoadInt64(&v.lastAccessed)
+		if now.Sub(time.Unix(0, last)) > w.evictionAge {
 			keysToEvict = append(keysToEvict, key)
 		}
 	})
@@ -147,21 +191,24 @@ func (w *Worker) runEvictionCycle() {
 
 	fmt.Printf("Evicting %d stale VSA instances...\n", len(keysToEvict))
 	for _, key := range keysToEvict {
-		// Before evicting, we should do one final commit.
-		// A more robust implementation might integrate this with the commit cycle.
+		// Before evicting, do a final commit if needed and re-check staleness.
 		if vsaInstance, ok := w.store.counters.Load(key); ok {
 			managed := vsaInstance.(*managedVSA)
+			last := atomic.LoadInt64(&managed.lastAccessed)
+			if time.Since(time.Unix(0, last)) <= w.evictionAge {
+				// Touched recently; skip eviction.
+				continue
+			}
 			_, vector := managed.instance.State()
 			if vector != 0 {
 				fmt.Printf("  - Final commit for %s, vector: %d\n", key, vector)
-				err := w.persister.CommitBatch([]Commit{{Key: key, Vector: vector}})
-				if err != nil {
+				if err := w.persister.CommitBatch([]Commit{{Key: key, Vector: vector}}); err != nil {
 					fmt.Printf("ERROR: Failed to commit batch: %v\n", err)
-					return
+					continue
 				}
 				managed.instance.Commit(vector)
 			}
+			w.store.Delete(key)
 		}
-		w.store.Delete(key)
 	}
 }

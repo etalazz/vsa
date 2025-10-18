@@ -14,14 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package vsa provides a thread-safe, in-memory implementation of the
-// Vector-Scalar Accumulator (VSA) architectural pattern. It is designed to
-// efficiently track the state of volatile resource counters.
-
+// Package core contains integration tests for the worker's commit and eviction flows.
+// It validates end-to-end behavior of threshold commits, final flush on stop,
+// and eviction's final commit semantics.
 package core
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -150,9 +150,9 @@ func TestWorker_RunEvictionCycle_Integration(t *testing.T) {
 	// Mark 'stale' as old enough to evict; 'fresh' remains recent
 	store.ForEach(func(key string, mv *managedVSA) {
 		if key == "stale" {
-			mv.lastAccessed = time.Now().Add(-1 * time.Hour)
+			atomic.StoreInt64(&mv.lastAccessed, time.Now().Add(-1*time.Hour).UnixNano())
 		} else {
-			mv.lastAccessed = time.Now()
+			atomic.StoreInt64(&mv.lastAccessed, time.Now().UnixNano())
 		}
 	})
 
@@ -191,5 +191,103 @@ func TestVSAAvailableThroughWorkerFlow(t *testing.T) {
 	v.Update(-1) // vector=2 => available=8
 	if got := v.Available(); got != 8 {
 		t.Fatalf("available expected 8, got %d", got)
+	}
+}
+
+// commitLoop goroutine: ensure the ticker triggers a commit when threshold is met.
+func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
+	store := NewStore(100)
+	rp := &recordingPersister{}
+	w := NewWorker(store, rp, 3, 10*time.Millisecond, time.Hour, time.Hour)
+
+	v := store.GetOrCreate("tick-key")
+	v.Update(3) // meets threshold
+
+	w.Start()
+	defer w.Stop()
+
+	// Wait a few ticks to allow the commit loop to run
+	time.Sleep(40 * time.Millisecond)
+
+	if len(rp.batches) == 0 {
+		t.Fatalf("expected at least 1 batch commit from commitLoop tick")
+	}
+
+	if s, vec := v.State(); s != 97 || vec != 0 {
+		t.Fatalf("after commitLoop, expected (scalar=97, vector=0), got (%d,%d)", s, vec)
+	}
+}
+
+// Stop should trigger a final flush that commits sub-threshold remainders.
+func TestWorker_CommitLoop_StopTriggersFinalRemainderFlush(t *testing.T) {
+	store := NewStore(100)
+	rp := &recordingPersister{}
+	// Long interval so tick does not fire before Stop
+	w := NewWorker(store, rp, 10, time.Hour, time.Hour, time.Hour)
+
+	v := store.GetOrCreate("stop-key")
+	for i := 0; i < 11; i++ {
+		v.Update(1)
+	}
+
+	w.Start()
+	w.Stop() // triggers final flush
+
+	// No need to sleep because Stop waits for loops to exit now; but be lenient.
+	time.Sleep(5 * time.Millisecond)
+
+	// Expect a commit for the exact remainder (11)
+	var found bool
+	for _, c := range rp.flatten() {
+		if c.Key == "stop-key" && c.Vector == 11 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected commit for stop-key=11 on Stop, got: %#v", rp.flatten())
+	}
+
+	if s, vec := v.State(); s != 89 || vec != 0 {
+		t.Fatalf("after final flush, expected (scalar=89, vector=0), got (%d,%d)", s, vec)
+	}
+}
+
+// evictionLoop goroutine: ensure ticker evicts stale entries and commits final vector.
+func TestWorker_EvictionLoop_TickEvictsStale(t *testing.T) {
+	store := NewStore(100)
+	rp := &recordingPersister{}
+	w := NewWorker(store, rp, 1000, time.Hour, 5*time.Millisecond, 5*time.Millisecond)
+
+	stale := store.GetOrCreate("stale-tick")
+	for i := 0; i < 4; i++ {
+		stale.Update(1)
+	}
+
+	// Mark last accessed old
+	store.ForEach(func(key string, mv *managedVSA) {
+		if key == "stale-tick" {
+			atomic.StoreInt64(&mv.lastAccessed, time.Now().Add(-time.Hour).UnixNano())
+		}
+	})
+
+	w.Start()
+	defer w.Stop()
+
+	// Wait for eviction ticker
+	time.Sleep(20 * time.Millisecond)
+
+	if _, ok := store.counters.Load("stale-tick"); ok {
+		t.Fatalf("expected stale-tick to be evicted by evictionLoop")
+	}
+
+	var found bool
+	for _, c := range rp.flatten() {
+		if c.Key == "stale-tick" && c.Vector == 4 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected final commit for stale-tick=4 before eviction; commits=%#v", rp.flatten())
 	}
 }

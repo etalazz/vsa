@@ -64,6 +64,22 @@ This log is **proof that the VSA architecture is working as designed.**
     -   Because the test script sends requests so quickly, by the time the worker wakes up, the vector might be exactly `50`, or it might already be `51` or `52` from requests that arrived in the few microseconds it took to run.
     -   The worker then "drains" this value (e.g., `51`) by committing it to the database, and the in-memory vector for Alice resets. The cycle then repeats. This fluctuation is normal and expected in a high-throughput concurrent system.
 
+
+## Graceful Shutdown Output (Final Flush)
+
+When you stop the server (for example, pressing Ctrl+C), the background worker performs a final flush that persists any remaining, sub-threshold vectors. You should see an output similar to the following in the server terminal:
+
+```plain text
+Shutting down server...
+Stopping background worker...
+[2025-10-17T18:23:22-06:00] Persisting batch of 2 commits...
+  - KEY: alice-key            VECTOR: 43
+  - KEY: bob-key              VECTOR: 1
+Server gracefully stopped.
+```
+
+Note: bob-key appears here because its vector never crossed the commitThreshold during runtime; it was included by the worker's final flush at shutdown.
+
 ### Conclusion
 
 These two logs, viewed together, provide a complete picture of the VSA system in action. The client-side test proves it is **accurate**, while the server-side log proves it is **incredibly efficient**.
@@ -80,15 +96,15 @@ Most standard applications implement rate limiters or counters by making a netwo
 
 #### The Hyperscale Approach: Distributed Aggregation
 
-The largest internet companies (like Cloudflare, Google, and others) cannot afford the bottleneck of a centralized database for every edge request. As described in engineering blogs like Cloudflare's ["How we built rate limiting capable of scaling to millions of domains"](https://blog.cloudflare.com/counting-things-a-lot-of-different-things/), these companies use a more sophisticated, distributed pattern. They perform counting and aggregation in-memory at the "edge" (on their individual servers) and only synchronize with a central system periodically.
+The largest internet companies (like Cloudflare, Google, and others) cannot afford the bottleneck of a centralized database for every edge request. As described in engineering blogs like Cloudflare's ["How we built rate limiting capable of scaling to millions of domains"](https://blog.cloudflare.com/how-we-built-rate-limiting-capable-of-scaling-to-millions-of-domains/), these companies use a more sophisticated, distributed pattern. They perform counting and aggregation in-memory at the "edge" (on their individual servers) and only synchronize with a central system periodically.
 
 This is the exact same principle as the VSA architecture.
 
 | VSA Project Component | Hyperscale Equivalent |
 | :--- | :--- |
 | **`pkg/vsa`** (The VSA Engine) | A proprietary, internal library for high-speed, in-memory state aggregation. |
-| **`internal/core/store`** (The Store) | The logic running on each "edge" server to manage counters for millions of users. |
-| **`internal/core/worker`** (The Worker) | The background process responsible for synchronizing the edge state with a central database. |
+| **`internal/ratelimiter/core/store.go`** (The Store) | The logic running on each "edge" server to manage counters for millions of users. |
+| **`internal/ratelimiter/core/worker.go`** (The Worker) | The background process responsible for synchronizing the edge state with a central database. |
 
 ### The VSA Project's Competitive Advantage
 
@@ -99,3 +115,6 @@ A typical company does not have the specialized distributed systems engineers re
 So when asked, the answer is clear:
 
 > "No. Most systems use a simple centralized counter that creates a bottleneck. Our VSA architecture uses the same principles as hyperscale companies, bringing the performance of an edge-first, distributed counting system into a clean, reusable package."
+
+---
+
