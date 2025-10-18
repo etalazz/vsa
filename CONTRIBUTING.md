@@ -112,3 +112,32 @@ Please include:
 ## License
 
 This project is licensed under the Apache License, Version 2.0. By contributing, you agree that your contributions will be licensed under the same terms.
+
+
+---
+
+## Continuous Integration (GitHub Actions)
+
+This repository includes an automated CI workflow that builds and tests the project on every push and pull request.
+
+- Workflow file: .github/workflows/test.yml
+- Triggers:
+  - push to branches: main, master
+  - pull_request
+  - manual run via workflow_dispatch
+- Environment: ubuntu-latest with Go version taken from go.mod (via actions/setup-go).
+- Caching: Go module cache is enabled to speed up subsequent runs.
+- Steps executed:
+  1. Checkout the repository
+  2. Set up Go using the version from go.mod and enable caching
+  3. Build the project: `go build ./...`
+  4. Run unit and integration tests: `go test ./... -v`
+  5. Run the race detector: `go test -race ./... -v`
+
+How to run the same checks locally:
+- Full test run: `go test ./...`
+- With verbose output: `go test ./... -v`
+- With the race detector: `go test -race ./...`
+- Run benchmarks (optional): `go test -bench=. ./benchmarks -benchmem`
+
+You can view CI results in the GitHub Actions tab of your repository. Click on the latest run under the “CI” workflow to see build logs and test output. If a test fails in CI, reproduce locally using the commands above (preferably with `-race` for concurrency-related issues) before opening a PR.

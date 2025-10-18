@@ -55,6 +55,13 @@ func (r *recordingPersister) flatten() []Commit {
 	return all
 }
 
+// batchCount returns the current number of persisted batches in a race-safe way.
+func (r *recordingPersister) batchCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.batches)
+}
+
 func TestWorker_RunCommitCycle_Integration(t *testing.T) {
 	store := NewStore(100) // Initialize with 100 as available resources
 
@@ -209,7 +216,7 @@ func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
 	// Wait a few ticks to allow the commit loop to run
 	time.Sleep(40 * time.Millisecond)
 
-	if len(rp.batches) == 0 {
+	if rp.batchCount() == 0 {
 		t.Fatalf("expected at least 1 batch commit from commitLoop tick")
 	}
 
