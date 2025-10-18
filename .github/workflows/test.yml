@@ -2,14 +2,17 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ master, main ]
   pull_request:
+    branches: [ master, main ]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -21,7 +24,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: "1.22"
           cache: true
 
       - name: Build
