@@ -19,100 +19,156 @@
 // efficiently track the state of volatile resource counters.
 package vsa
 
-import "sync"
+import (
+	"runtime"
+	"sync"
+	"sync/atomic"
+)
+
+// cache line size varies; we over-pad to 128 bytes to avoid false sharing
+const padSize = 128 - 8 // atomic.Int64 is 8 bytes; remainder to reach >=128
+
+type stripe struct {
+	val atomic.Int64
+	_   [padSize]byte
+}
 
 // VSA is a thread-safe, in-memory data structure for Vector-Scalar Accumulation.
-// It is designed to track the state of a volatile resource counter by filtering
-// I/O overhead from self-canceling transactions.
+// Public API is preserved; internals use striped atomics to collapse contention.
 type VSA struct {
-	// scalar is the stable, base value, typically persisted to a database.
-	scalar int64
+	// scalar is the durable base value (persisted elsewhere)
+	scalar atomic.Int64
 
-	// vector is the volatile, in-memory accumulator for uncommitted changes.
-	vector int64
+	// committedOffset accumulates amounts already committed to storage.
+	// Effective in-memory vector = sum(stripes) - committedOffset.
+	committedOffset atomic.Int64
 
-	// mu protects concurrent access to scalar and vector.
-	mu sync.RWMutex
+	// per-CPU-like stripes to reduce contention on hot keys
+	stripes []stripe
+	mask    int // stripes-1 (power-of-two mask)
+
+	// chooser is a simple counter to spread updates across stripes
+	chooser atomic.Uint64
+
+	// Small critical section for TryConsume to preserve gating semantics
+	tryMu sync.Mutex
 }
 
 // New creates and initializes a new VSA instance.
 // The initialScalar should be the last known value from the persistent data store.
 func New(initialScalar int64) *VSA {
-	return &VSA{
-		scalar: initialScalar,
-		vector: 0,
-	}
+	// STRIPES = next_pow2(2×GOMAXPROCS), capped to [8, 128]
+	p := runtime.GOMAXPROCS(0)
+	s := nextPow2(max(8, min(128, 2*p)))
+	v := &VSA{stripes: make([]stripe, s), mask: s - 1}
+	v.scalar.Store(initialScalar)
+	return v
 }
 
 // Update applies a change to the VSA's volatile vector.
-// This operation is extremely fast and only involves an in-memory, thread-safe update.
-// It accepts positive or negative values.
+// Hot path: lock-free atomic add on a chosen stripe.
 func (v *VSA) Update(value int64) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.vector += value
+	// Pick a stripe via round-robin counter to distribute contention
+	idx := int(v.chooser.Add(1)) & v.mask
+	v.stripes[idx].val.Add(value)
 }
 
-// Available returns the real-time available resource count.
-// It is calculated on the fly using the formula: Available = Scalar - |Vector|.
-// This is a fast, read-only operation.
+// Available returns the real-time available resource count: S - |A_net|.
+// We compute A_net by summing stripes and subtracting committedOffset.
 func (v *VSA) Available() int64 {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-	return v.scalar - abs(v.vector)
+	s := v.scalar.Load()
+	net := v.currentVector()
+	return s - abs(net)
 }
 
-// State returns the current scalar and vector values.
-// Useful for monitoring and debugging.
+// State returns the current scalar and effective vector values.
 func (v *VSA) State() (scalar, vector int64) {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-	return v.scalar, v.vector
+	return v.scalar.Load(), v.currentVector()
 }
 
-// CheckCommit determines if a commit to the persistent store is necessary based on a given threshold.
-// It returns a boolean indicating if a commit should happen, and the value of the vector at that moment.
-// This value should be used by the caller to perform the commit.
-// This is a read-only operation and does not change the VSA's state.
-func (v *VSA) CheckCommit(threshold int64) (shouldCommit bool, vectorToCommit int64) {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-	if abs(v.vector) >= threshold {
-		return true, v.vector
+// CheckCommit determines if a commit is required for the given threshold.
+// It returns (true, vector) when |vector| ≥ threshold.
+func (v *VSA) CheckCommit(threshold int64) (bool, int64) {
+	net := v.currentVector()
+	if abs(net) >= threshold {
+		return true, net
 	}
 	return false, 0
 }
 
-// Commit atomically adjusts the VSA's internal state after a successful persistent write.
-// The caller is responsible for persisting the change to a database. After the database
-// write succeeds, this function should be called with the exact vector value that was committed.
-// It moves the committed value from the volatile vector to the stable scalar.
-// Per the VSA algorithm: S_new = S_old - A_net, then A_net = 0
+// Commit adjusts the internal state after a successful persistent write.
+// Per VSA: S_new = S_old - A_net_committed, and the in-memory vector is reduced by the same amount.
+// We do not sweep/reset stripes here to keep Update lock-free; instead we track a committedOffset.
 func (v *VSA) Commit(committedVector int64) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.scalar -= committedVector
-	v.vector -= committedVector
+	if committedVector == 0 {
+		return
+	}
+	v.scalar.Add(-committedVector)
+	v.committedOffset.Add(committedVector)
 }
 
 // TryConsume atomically checks whether at least n units are available and, if so,
-// consumes them by incrementing the volatile vector. This prevents an oversubscription
-// race under high concurrency where multiple goroutines could observe the same
-// positive availability and all proceed. Returns true if the consume succeeded.
+// consumes them by incrementing the volatile vector. Uses a tiny critical section
+// to ensure no oversubscription under contention while keeping Update lock-free.
 func (v *VSA) TryConsume(n int64) bool {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if v.scalar-abs(v.vector) >= n {
-		v.vector += n
-		return true
+	v.tryMu.Lock()
+	defer v.tryMu.Unlock()
+	// Gate using current availability
+	avail := v.scalar.Load() - abs(v.currentVector())
+	if avail < n {
+		return false
 	}
-	return false
+	// Reserve by updating a stripe
+	idx := int(v.chooser.Add(1)) & v.mask
+	v.stripes[idx].val.Add(n)
+	return true
 }
 
-// abs is a helper for calculating the absolute value of an int64.
+// currentVector computes the effective in-memory vector: sum(stripes) - committedOffset.
+func (v *VSA) currentVector() int64 {
+	var sum int64
+	for i := range v.stripes {
+		sum += v.stripes[i].val.Load()
+	}
+	return sum - v.committedOffset.Load()
+}
+
+// ---- helpers ----
+
 func abs(n int64) int64 {
 	if n < 0 {
 		return -n
 	}
 	return n
+}
+
+func nextPow2(x int) int {
+	if x <= 1 {
+		return 1
+	}
+	x--
+	x |= x >> 1
+	x |= x >> 2
+	x |= x >> 4
+	x |= x >> 8
+	x |= x >> 16
+	if intSize() == 64 {
+		x |= x >> 32
+	}
+	return x + 1
+}
+
+func intSize() int { return 32 << (^uint(0) >> 63) }
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

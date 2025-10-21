@@ -29,8 +29,9 @@ import (
 func TestVSA_Basics(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		v := New(100)
-		if v.scalar != 100 || v.vector != 0 {
-			t.Errorf("New(100) = %+v, want scalar=100, vector=0", v)
+		s, vec := v.State()
+		if s != 100 || vec != 0 {
+			t.Errorf("New(100) State() = (%d, %d), want (100, 0)", s, vec)
 		}
 	})
 

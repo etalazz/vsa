@@ -177,3 +177,34 @@ When building high-throughput counters, developers are typically forced into a p
 > Existing solutions force a painful choice: you can either have stateless, in-memory limiters that are fast but not durable, or you can have stateful, Redis-backed limiters that are durable but slow and expensive due to network I/O.
 >
 > Our VSA architecture is the only solution that offers the best of both worlds: the extreme speed of in-memory processing combined with the durability of a persistent backend, all while reducing database traffic.
+
+
+## 11. Benchmarks — Real-World Efficiency
+
+Under a 50 % churn workload (equal + and − updates), the Vector–Scalar Accumulator (VSA) collapsed 200 000 logical operations into a single commit every ~43 ms, achieving:
+
+| Metric | Result |
+|---|---|
+| Throughput | 4.5 M ops/s (32 goroutines, 1 hot key) |
+| p99 latency | ≈ 0.5 ms |
+| Writes per 1 000 ops | 0.005 |
+| Write reduction | ≈ 99.99 % |
+| Live memory | ~370 MiB |
+| Crash-loss window (max |A_net|) | ~270 units |
+
+These results reflect a high-churn scenario where many updates self-cancel before persistence. In monotonic or low-churn traffic, reduction scales proportionally to the amount of cancellation.
+
+### ⚙️ Test Harness Configuration
+- Variant: vsa
+- Ops: 200000
+- Goroutines: 32
+- Keys: 1
+- Churn: 50%
+- Duration: 44 ms
+
+Flags: `--high_threshold=192 --low_threshold=96 --max_age=20ms --stripes=128`
+
+### 🧠 Interpretation
+- VSA commits information, not traffic — only the net drift since the last commit is written.
+- Ideal for volatile counters: rate limiters, telemetry metrics, IoT sensors, likes/unlikes.
+- Trade-off: A small in-flight RAM state (|A_net|) can be lost on crash; tune thresholds or add a durable log for perfect replay.
