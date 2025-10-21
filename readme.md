@@ -1,4 +1,6 @@
-# Vector-Scalar Accumulator (VSA)
+# Commit information, not traffic
+
+## Vector-Scalar Accumulator (VSA)
 
 A high-performance, in-memory data structure designed to track the state of volatile resources by filtering I/O overhead from self-canceling transactions.
 
