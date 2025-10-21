@@ -210,3 +210,39 @@ Flags: `--high_threshold=192 --low_threshold=96 --max_age=20ms --stripes=128`
 - VSA commits information, not traffic — only the net drift since the last commit is written.
 - Ideal for volatile counters: rate limiters, telemetry metrics, IoT sensors, likes/unlikes.
 - Trade-off: A small in-flight RAM state (|A_net|) can be lost on crash; tune thresholds or add a durable log for perfect replay.
+
+
+## 12. Summary — Results at a glance
+
+Plain-English takeaway
+- Per-op speed: An atomic increment is the cheapest primitive on CPU. VSA does not make a single in-memory update faster than an atomic.
+- System speed with durability: When the system must persist/replicate updates, VSA wins under churn by writing only the net effect. That slashes I/O, which is usually the real bottleneck.
+- What “churn” means: Many + and − updates cancel each other shortly after they happen (e.g., reserve then cancel, like then unlike).
+
+What the numbers showed in our harness
+- High-churn case (≈50% + and −): Millions of logical updates collapsed into only hundreds of durable writes over ~250 ms runs (≈99.99% reduction). A representative run: atomic persisted ≈6.1M writes; VSA persisted ≈345 — same period, same workload.
+- Point-in-time 200k-op demo (50% churn): VSA committed about once every ~43 ms with p99 ≈ 0.5 ms and only a handful of durable writes — demonstrating “commit information, not traffic.”
+- Low/no churn (e.g., all increments): VSA can still batch writes, but there’s little to cancel; reduction is smaller and controlled by thresholds and max-age.
+
+Why this matters
+- Durable writes (DB/log/network) are orders of magnitude slower than CPU instructions. Cutting writes by 100×–10,000× materially improves throughput and p99 latency in real systems.
+- Reads stay O(1): Effective value = Scalar (S) + in-memory net (A_net).
+
+Trade-offs to be aware of
+- Crash-loss window: Uncommitted A_net can be lost on crash. You bound this with commit thresholds (high/low) and max-age, or pair VSA with a durable event log to replay if needed.
+- Memory: You hold a small, bounded in-flight delta in RAM; tune thresholds and “stripes/keys” for your workload.
+
+How to think about using VSA
+- Use VSA when you can tolerate batching (tens of milliseconds) and when churn/noise is common. Expect big I/O savings and better tail latency.
+- Stick to per-event persistence (atomic/batch) if you must durably record every single change immediately or if there’s almost no cancellation.
+
+Run the A/B harness yourself (quick start)
+- Atomic (per-event persist) vs VSA (thresholds + max-age), sweep churn 0–90%.
+- Enable the integration tests (they’re opt-in to keep CI stable):
+  - Windows PowerShell examples:
+    - $env:HARNESS_AB='1'; go test .\benchmarks\harness -run TestABSweepAgainstAtomic -v
+    - $env:HARNESS_TUNE='1'; go test .\benchmarks\harness -run TestVSAKnobTuning -v
+- Useful knobs: HARNESS_THRESHOLD, HARNESS_LOW_THRESHOLD, HARNESS_MAX_AGE, HARNESS_COMMIT_INTERVAL, HARNESS_STRIPES (shards/keys), HARNESS_WRITE_DELAY (simulate durable path)
+
+Bottom line
+- If your system pays for every write, VSA’s ability to “commit the net effect” yields dramatic I/O reduction and better end-to-end performance under churn. If you only need an in-process counter, a plain atomic is still the simplest and fastest per-op.
