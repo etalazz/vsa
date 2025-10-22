@@ -24,6 +24,8 @@ const (
 	variantAtomic variantType = "atomic"
 	variantBatch  variantType = "batch"
 	variantCRDT   variantType = "crdt"
+	variantToken  variantType = "token"
+	variantLeaky  variantType = "leaky"
 )
 
 type metrics struct {
@@ -440,11 +442,121 @@ func (c *pnCounter) stopBG() {
 	c.wg.Wait()
 }
 
+// ---- Token Bucket (baseline) ----
+
+type tokenBucket struct {
+	p      *persister
+	cap    float64
+	rate   float64 // tokens per second
+	mu     sync.Mutex
+	tokens map[string]float64
+	last   map[string]time.Time
+}
+
+func newTokenBucket(p *persister, keys []string, capacity int, rate float64) *tokenBucket {
+	tb := &tokenBucket{p: p, cap: float64(capacity), rate: rate, tokens: make(map[string]float64, len(keys)), last: make(map[string]time.Time, len(keys))}
+	now := time.Now()
+	for _, k := range keys {
+		tb.tokens[k] = float64(capacity)
+		tb.last[k] = now
+	}
+	return tb
+}
+
+func (t *tokenBucket) update(key string, delta int64) {
+	// Refill and consume/refund locally; simulate a read + a write to external store per op
+	t.mu.Lock()
+	now := time.Now()
+	if prev, ok := t.last[key]; ok {
+		refill := now.Sub(prev).Seconds() * t.rate
+		if refill > 0 {
+			t.tokens[key] += refill
+			if t.tokens[key] > t.cap {
+				t.tokens[key] = t.cap
+			}
+		}
+	} else {
+		// initialize on first touch
+		t.tokens[key] = t.cap
+	}
+	t.last[key] = now
+	if delta >= 0 {
+		if t.tokens[key] >= 1 {
+			t.tokens[key] -= 1
+		}
+	} else {
+		// refund/add a token back (bounded by cap)
+		t.tokens[key] += 1
+		if t.tokens[key] > t.cap {
+			t.tokens[key] = t.cap
+		}
+	}
+	t.mu.Unlock()
+	// Simulate one read + one write per logical operation
+	t.p.write(0) // read
+	t.p.write(1) // write
+}
+func (t *tokenBucket) startBG() {}
+func (t *tokenBucket) stopBG()  {}
+
+// ---- Leaky Bucket (baseline) ----
+
+type leakyBucket struct {
+	p        *persister
+	rate     float64 // leak rate per second
+	capacity float64
+	mu       sync.Mutex
+	level    map[string]float64
+	last     map[string]time.Time
+}
+
+func newLeakyBucket(p *persister, keys []string, capacity int, rate float64) *leakyBucket {
+	lb := &leakyBucket{p: p, rate: rate, capacity: float64(capacity), level: make(map[string]float64, len(keys)), last: make(map[string]time.Time, len(keys))}
+	now := time.Now()
+	for _, k := range keys {
+		lb.level[k] = 0
+		lb.last[k] = now
+	}
+	return lb
+}
+
+func (l *leakyBucket) update(key string, delta int64) {
+	// Apply leak and enqueue/dequeue; simulate read + write per op
+	l.mu.Lock()
+	now := time.Now()
+	prev := l.last[key]
+	leaked := now.Sub(prev).Seconds() * l.rate
+	if leaked > 0 {
+		l.level[key] -= leaked
+		if l.level[key] < 0 {
+			l.level[key] = 0
+		}
+	}
+	l.last[key] = now
+	if delta >= 0 {
+		// add one unit if capacity allows
+		if l.level[key] < l.capacity {
+			l.level[key] += 1
+		}
+	} else {
+		// negative deltas reduce queued level
+		l.level[key] -= 1
+		if l.level[key] < 0 {
+			l.level[key] = 0
+		}
+	}
+	l.mu.Unlock()
+	l.p.write(0) // read
+	l.p.write(1) // write
+}
+func (l *leakyBucket) startBG() {}
+func (l *leakyBucket) stopBG()  {}
+
 // ---- Runner ----
 
 func main() {
 	var (
-		variantStr = flag.String("variant", "vsa", "vsa|atomic|batch|crdt")
+		variantStr = flag.String("variant", "vsa", "vsa|atomic|batch|crdt|token|leaky")
 		opCount    = flag.Int("ops", 200_000, "total operations across all goroutines")
 		workers    = flag.Int("goroutines", 32, "concurrent workers")
 		keysN      = flag.Int("keys", 1, "number of hot keys")
@@ -466,6 +578,10 @@ func main() {
 		replicas    = flag.Int("replicas", 4, "CRDT replicas")
 		mergePeriod = flag.Duration("merge_interval", 25*time.Millisecond, "CRDT merge interval")
 
+		// Baselines (token/leaky)
+		rate  = flag.Float64("rate", 10000, "rate tokens/sec for token/leaky baselines")
+		burst = flag.Int("burst", 100, "capacity/burst for token/leaky baselines")
+
 		// Persistence
 		writeDelay = flag.Duration("write_delay", 0, "simulated delay per datastore call (e.g., 50us, 1ms)")
 
@@ -482,8 +598,8 @@ func main() {
 	}
 
 	v := variantType(strings.ToLower(*variantStr))
-	if v != variantVSA && v != variantAtomic && v != variantBatch && v != variantCRDT {
-		fmt.Println("-variant must be one of: vsa|atomic|batch|crdt")
+	if v != variantVSA && v != variantAtomic && v != variantBatch && v != variantCRDT && v != variantToken && v != variantLeaky {
+		fmt.Println("-variant must be one of: vsa|atomic|batch|crdt|token|leaky")
 		os.Exit(2)
 	}
 
@@ -501,6 +617,10 @@ func main() {
 		prod = newBatcher(p, *batchSize, *batchInterval)
 	case variantCRDT:
 		prod = newPN(p, keys, *replicas, *mergePeriod)
+	case variantToken:
+		prod = newTokenBucket(p, keys, *burst, *rate)
+	case variantLeaky:
+		prod = newLeakyBucket(p, keys, *burst, *rate)
 	case variantVSA:
 		prod = newVSAHarness(p, keys, *initialScalar, *threshold, *commitInterval)
 		// set max-age flush and hysteresis low watermark on VSA harness if provided

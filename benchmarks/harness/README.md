@@ -1,11 +1,13 @@
 # VSA Benchmark Harness
 
-This harness compares four approaches for volatile counters under churny workloads:
+This harness compares approaches for volatile counters under churny workloads:
 
 - VSA (Vector–Scalar Accumulator)
 - Atomic counter (persist every op)
 - Batching (defer ops; still persist every op logically)
 - CRDT PN-Counter (per-replica, eventually consistent merge)
+- Token bucket (baseline rate limiter; 1 read + 1 write per op)
+- Leaky bucket (baseline rate limiter; 1 read + 1 write per op)
 
 It reports:
 - writes/sec (logical writes) and dbCalls/sec (calls to the datastore)
@@ -53,7 +55,7 @@ bin/harness -variant=vsa -write_delay=50us -ops=200000 -goroutines=32 -keys=1 -t
 
 ## Flags
 ```
-  -variant             vsa|atomic|batch|crdt
+  -variant             vsa|atomic|batch|crdt|token|leaky
   -ops                 total operations across all goroutines (default 200k)
   -duration            run for this wall-clock duration instead of a fixed -ops (e.g., 750ms; default 0 = disabled)
   -goroutines          concurrent workers (default 32)
@@ -66,6 +68,8 @@ bin/harness -variant=vsa -write_delay=50us -ops=200000 -goroutines=32 -keys=1 -t
   -batch_interval      batching time threshold (default 10ms)
   -replicas            CRDT replica count (default 4)
   -merge_interval      CRDT merge period (default 25ms)
+  -rate                tokens/sec for token and leaky bucket baselines (default 10000)
+  -burst               capacity/burst for token and leaky bucket baselines (default 100)
   -write_delay         per datastore call artificial delay (e.g., 50us, 1ms; default 0)
   -sample_every        record latency every N ops (default 1)
   -max_latency_samples cap stored latency samples (default 200000); harness downsamples if exceeded
@@ -88,6 +92,34 @@ Writes: logical=1,524 (1,074/sec), dbCalls=1,524 (1,074/sec)
 Memory: Alloc=12.3 MiB  TotalAlloc=48.7 MiB  Sys=72.1 MiB  NumGC=3
 Contention (long ops >5× median): 27
 ```
+
+## Reproducible baseline sweep (sh)
+A small POSIX shell script is provided to run VSA vs token and leaky bucket baselines with fixed parameters and print a concise TSV table:
+
+```
+# From repo root or any directory (requires sh and Go 1.22+)
+sh benchmarks/harness/run_baselines.sh
+# or, if you prefer bash:
+bash benchmarks/harness/run_baselines.sh
+```
+
+On Windows, a PowerShell version is also available:
+
+```
+pwsh benchmarks/harness/run_baselines.ps1
+```
+
+Environment variables can override defaults (useful for CI):
+- HARNESS_DURATION (e.g., 750ms)
+- HARNESS_WORKERS (e.g., 32)
+- HARNESS_KEYS (e.g., 128)
+- HARNESS_CHURN (e.g., 50)
+- HARNESS_WRITE_DELAY (e.g., 50us)
+- HARNESS_THRESHOLD, HARNESS_LOW_THRESHOLD, HARNESS_MAX_AGE, HARNESS_COMMIT_INTERVAL
+- HARNESS_RATE, HARNESS_BURST
+
+The script prints the tail of each run for inspection and then emits a one-line-per-variant TSV summary with:
+Variant, Ops, Duration, Ops/sec, P50(us), P95(us), P99(us), LogicalWrites, DBCalls.
 
 ## Notes
 - CRDT here is a minimal PN-counter simulation. Each op writes locally; merges exchange max() and count as additional db calls. It is meant to provide a baseline comparison, not a full CRDT framework.
