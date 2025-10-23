@@ -109,6 +109,49 @@ Multi‑node tips:
 
 ---
 
+## Can I use VSA in both HTTP and non‑HTTP contexts?
+Yes. VSA is a library and pattern, not tied to a transport. You can:
+- Use it in‑process in any service or CLI by calling the Go API directly. See: `pkg/vsa` and `internal/ratelimiter/core`.
+- Expose it over HTTP or gRPC (as in `cmd/ratelimiter-api`) or via a local sidecar/daemon over gRPC/UDS.
+- Drive it from queues/streams, batch jobs, cron, or stream processors: the hot path remains in memory; the background worker commits deltas.
+
+The only requirements are a place to run the in‑memory store and a persister implementation for your datastore.
+
+---
+
+## Can I enforce multiple windows at once (e.g., 100/minute and 1000/hour simultaneously)?
+Yes. Model each window as a separate counter and admit only if all pass for the key.
+Options:
+- Separate keys per window (e.g., `user:minute` and `user:hour`), each with its own VSA state and thresholds.
+- Or wrap per‑key state that holds multiple VSAs and check them in order (fail fast).
+
+Pseudo‑code sketch:
+```text
+ok1 := minuteLimiter.TryConsume(key, 1)
+ok2 := hourLimiter.TryConsume(key, 1)
+allowed := ok1 && ok2
+remaining_min := minuteLimiter.Available(key)
+remaining_hr := hourLimiter.Available(key)
+```
+Tips:
+- Keep commit thresholds proportional to each window’s rate so commits stay efficient.
+- For sliding windows, you can reset/reseed scalars (S) periodically or model them as rolling quotas in persistence.
+
+---
+
+## Can VSA help with sudden spikes in a distributed setup? What about prediction/prefetch?
+VSA absorbs short bursts locally because the hot path is in RAM, but for large distributed spikes consider:
+- Key ownership/affinity: route a key to a single active owner to maximize batching and avoid double‑spend.
+- Surge headroom: allocate a small per‑key surge buffer in S (or permit temporary oversubscription) and let the worker reconcile quickly via lower thresholds and a smaller `commit_max_age` during spikes.
+- Adaptive knobs: lower `threshold` and `commit_max_age` automatically when the burn rate accelerates, then relax when traffic cools.
+- Pre‑allocation to nodes: if quota is global, pre‑slice budgets to nodes and periodically rebalance (or borrow) using idempotent commits.
+- Backpressure: if the persister/DB lags, raise thresholds or shed load; expose metrics to drive autoscaling.
+- Durability: if the spike risk window is unacceptable, add a WAL/event log so uncommitted A_net can be reconstructed.
+
+Note: “Predictive prefetch” generally means proactively increasing S or pre‑slicing budgets based on trend. It’s safe if changes are idempotent and reconciled by the background worker; avoid double‑counting by using batch IDs or commutative adds in the datastore.
+
+---
+
 ## Where do I configure these knobs in this repo?
 - Benchmark harness flags (CLI): see [../benchmarks/harness/README.md](../benchmarks/harness/README.md).
 - API demo flags (service): see [../cmd/ratelimiter-api/readme.md](../cmd/ratelimiter-api/readme.md). It supports `-commit_threshold`, `-commit_low_watermark`, `-commit_interval`, `-commit_max_age`, plus eviction knobs.
@@ -175,6 +218,145 @@ The demo uses a mock persister for clarity. In production, use any store that su
 - Redis with Lua guards
 
 The key is idempotency: applying the same batch twice should not double‑count.
+
+---
+
+## Visual guide: VSA architecture and data flow
+
+Below are simple diagrams to orient new readers. They illustrate how the hot path stays in RAM, how commits happen in the background, and common deployment patterns.
+
+### A) High‑level architecture (hot path vs background)
+<p align="center">
+  <img src="./arch_high_level.png" alt="High‑level architecture (hot path vs background)" width="900">
+</p>
+
+Key ideas:
+- Hot path (green) never waits on the database; it’s pure in‑memory work.
+- Background (blue) batches and commits only the net effect to the datastore.
+
+### B) Data flow sequence (when a request arrives)
+<p align="center">
+  <img src="./dataflow_seq.svg" alt="Data flow sequence (when a request arrives)" width="900">
+</p>
+
+### C) Deployment patterns
+<p align="center">
+  <img src="./Deployment_patterns.svg" alt="Deployment patterns" width="900">
+</p>
+
+Notes:
+- Prefer in‑process for the lowest latency. Sidecar is great for multi‑language teams. A central service requires hashing/affinity by key to keep batching effective.
+
+---
+
+## For developers: Integrating VSA with your stack
+
+This section shows practical ways to pair VSA with other technologies. Use it as a library inside your service, expose it via gRPC/HTTP as a sidecar, or combine it with queues and databases for durability and analytics.
+
+### 1) Use VSA as a Go library (fastest, in-process)
+```text
+import (
+    "fmt"
+    "vsa/pkg/vsa"
+)
+
+func allow(key string, v *vsa.VSA) bool {
+    if !v.TryConsume(1) { // gate atomically in RAM
+        return false
+    }
+    fmt.Println("remaining:", v.Available())
+    return true
+}
+
+// init per key (e.g., from config/DB at startup)
+v := vsa.New(1000)
+_ = allow("alice", v)
+```
+- What you get: nanosecond hot path, exact “remaining” from RAM.
+- Add a background committer (below) to persist the net effect.
+
+### 2) Embed Store + Worker in your Go service
+Use the production-style store/worker from `internal/ratelimiter/core`.
+```text
+import (
+    "time"
+    "vsa/internal/ratelimiter/core"
+)
+
+store := core.NewStore(1000) // scalar S per new key
+worker := core.NewWorker(
+    store,
+    core.NewMockPersister(),   // replace with your DB adapter
+    192,       // commit_threshold (high watermark)
+    96,        // lowCommitThreshold (hysteresis)
+    1*time.Millisecond,  // commitInterval
+    20*time.Millisecond, // commitMaxAge
+    30*time.Minute,      // evictionAge
+    5*time.Minute,       // evictionInterval
+)
+worker.Start()
+// request path
+u := store.GetOrCreate("alice")
+if u.TryConsume(1) { /* OK */ } else { /* 429 */ }
+// on shutdown
+worker.Stop()
+```
+- Files: [`internal/ratelimiter/core/store.go`](../internal/ratelimiter/core/store.go), [`internal/ratelimiter/core/worker.go`](../internal/ratelimiter/core/worker.go).
+- Demo server: [`cmd/ratelimiter-api`](../cmd/ratelimiter-api/readme.md).
+
+### 3) Sidecar/daemon via gRPC (polyglot services)
+Run VSA as a local daemon per host/Pod and call it over gRPC/UDS.
+- Proto sketch:
+  - `rpc CheckAndConsume(CheckReq){ returns(CheckResp) }`
+  - `CheckReq{ string key; int64 units; }`
+  - `CheckResp{ bool allowed; int64 remaining; }`
+- Handler pseudocode:
+```text
+func (s *Server) CheckAndConsume(ctx context.Context, r *Req) (*Resp, error) {
+    v := store.GetOrCreate(r.Key)
+    if !v.TryConsume(r.Units) {
+        return &Resp{Allowed:false, Remaining:v.Available()}, nil
+    }
+    return &Resp{Allowed:true, Remaining:v.Available()}, nil
+}
+```
+- Pros: one implementation for many languages; hot path still local.
+
+### 4) Pair with a durable log (Kafka/Kinesis) and a DB
+- Inline request path:
+  1) Admit with VSA (`TryConsume`).
+  2) Optionally append event to a durable log for audit/replay.
+- Background:
+  - Commit net deltas from the worker to your database with idempotency.
+- Recovery:
+  - Rebuild scalars by replaying the log or via periodic snapshots.
+
+### 5) Persistence adapters (idempotent upserts)
+- Postgres (UPSERT with `batch_id`):
+```sql
+INSERT INTO vsa_commits(key, delta, batch_id, committed_at)
+VALUES ($1,$2,$3,now())
+ON CONFLICT (batch_id) DO NOTHING;  -- idempotent
+UPDATE limits SET scalar = scalar - $2, updated_at=now() WHERE key=$1;
+```
+- Redis (Lua, guard on `batch_id`): store `seen:{batch_id}` with TTL; apply `HINCRBY` only if unseen.
+- DynamoDB (conditional write): `UpdateItem` with `attribute_not_exists(batch_id)` to avoid double-apply.
+
+### 6) API gateways and proxies
+- Envoy: implement the Rate Limit Service (RLS) or ext_authz adapter that calls the local VSA.
+- NGINX/Ingress: use a small sidecar and talk over localhost (Unix socket) from njs/Lua or upstream module.
+- Key affinity: hash on `{tenant}:{user}` so the same key lands on the same node to maximize batching.
+
+### 7) Kubernetes & ops tips
+- Sticky routing by key (LB hash policy) → better batching, lower cross-node chatter.
+- Scale on CPU plus `db_calls_per_sec` from your persister metrics.
+- Expose Prometheus metrics: `vsa_commits_total`, `vsa_db_calls_total`, `vsa_commit_interval_seconds`, `vsa_age_since_last_commit_seconds`, `vsa_available` (samples).
+
+### 8) Mapping harness → service flags
+- Harness VSA flags: `-threshold`, `-low_threshold`, `-commit_interval`, `-commit_max_age`.
+- API demo flags: `-commit_threshold`, `-commit_low_watermark`, `-commit_interval`, `-commit_max_age`.
+- Recommended starting points (128 keys):
+  - Balanced: `commit_interval=1ms, commit_threshold=192, commit_low_watermark=96, commit_max_age=20ms`.
 
 ---
 

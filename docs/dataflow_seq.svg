@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+
+    <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+    <text x="700.0" y="48" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="28" fill="#0f172a" font-weight="600">Request admission and background commit</text>
+    <text x="700.0" y="78" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#94a3b8">Styled SVG · crisp text · scale without blur</text>
+    
+    <rect x="30.0" y="64" rx="10" ry="10" width="180" height="44" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="120" y="92.0" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="16" fill="#0f172a" font-weight="600">Client</text>
+    <line x1="120" y1="120" x2="120" y2="800" stroke="#94a3b8" stroke-dasharray="6,6" stroke-width="1.5"/>
+    
+    <rect x="290.0" y="64" rx="10" ry="10" width="180" height="44" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="380" y="92.0" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="16" fill="#0f172a" font-weight="600">API / Gateway</text>
+    <line x1="380" y1="120" x2="380" y2="800" stroke="#94a3b8" stroke-dasharray="6,6" stroke-width="1.5"/>
+    
+    <rect x="610.0" y="64" rx="10" ry="10" width="180" height="44" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="700" y="92.0" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="16" fill="#0f172a" font-weight="600">VSA (RAM)</text>
+    <line x1="700" y1="120" x2="700" y2="800" stroke="#94a3b8" stroke-dasharray="6,6" stroke-width="1.5"/>
+    
+    <rect x="890.0" y="64" rx="10" ry="10" width="180" height="44" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="980" y="92.0" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="16" fill="#0f172a" font-weight="600">Commit worker</text>
+    <line x1="980" y1="120" x2="980" y2="800" stroke="#94a3b8" stroke-dasharray="6,6" stroke-width="1.5"/>
+    
+    <rect x="1130.0" y="64" rx="10" ry="10" width="180" height="44" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="1220" y="92.0" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="16" fill="#0f172a" font-weight="600">DB / KV / Log</text>
+    <line x1="1220" y1="120" x2="1220" y2="800" stroke="#94a3b8" stroke-dasharray="6,6" stroke-width="1.5"/>
+    <line x1="120" y1="150" x2="380" y2="150" stroke="#334155" stroke-width="2"/>
+    <polygon points="380,150 370,144 370,156" fill="#334155"/>
+    
+    <text x="250.0" y="142" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">1· </tspan>Request (key, units)</text>
+    <line x1="380" y1="206" x2="700" y2="206" stroke="#334155" stroke-width="2"/>
+    <polygon points="700,206 690,200 690,212" fill="#334155"/>
+    
+    <text x="540.0" y="198" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">2· </tspan>TryConsume(units)</text>
+    
+    <rect x="210" y="216" width="760" height="150" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="8,6"/>
+    <rect x="210" y="216" width="68" height="22" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="218" y="232" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="13" fill="#0f172a" font-weight="600">alt</text>
+    <line x1="700" y1="246" x2="380" y2="246" stroke="#16a34a" stroke-width="2"/>
+    <polygon points="380,246 390,240 390,252" fill="#16a34a"/>
+    
+    <text x="540.0" y="238" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">3· </tspan>true (reserved)</text>
+    <line x1="380" y1="282" x2="120" y2="282" stroke="#16a34a" stroke-width="2"/>
+    <polygon points="120,282 130,276 130,288" fill="#16a34a"/>
+    
+    <text x="250.0" y="274" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">4· </tspan>200 OK  +  X‑RateLimit‑Remaining</text>
+    <line x1="700" y1="322" x2="380" y2="322" stroke="#334155" stroke-width="2" stroke-dasharray="6,6"/>
+    <polygon points="380,322 390,316 390,328" fill="#334155"/>
+    
+    <text x="540.0" y="314" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">3· </tspan>false</text>
+    <line x1="380" y1="358" x2="120" y2="358" stroke="#334155" stroke-width="2" stroke-dasharray="6,6"/>
+    <polygon points="120,358 130,352 130,364" fill="#334155"/>
+    
+    <text x="250.0" y="350" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">4· </tspan>429 Too Many Requests</text>
+    
+    <rect x="865.0" y="386" width="230" height="56" rx="10" ry="10" fill="#eef2ff" stroke="#334155" stroke-dasharray="4,4"/>
+    <text x="877.0" y="406" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="13" fill="#0f172a">Commit worker runs</text><text x="877.0" y="424" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="13" fill="#0f172a">every commit_interval</text>
+    <line x1="980" y1="406" x2="700" y2="406" stroke="#334155" stroke-width="2"/>
+    <polygon points="700,406 710,400 710,412" fill="#334155"/>
+    
+    <text x="840.0" y="398" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">5· </tspan>Check |A_net| and idle age</text>
+    
+    <rect x="520" y="424" width="740" height="160" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="8,6"/>
+    <rect x="520" y="424" width="68" height="22" fill="#e0f2fe" stroke="#334155" stroke-width="1.5"/>
+    <text x="528" y="440" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="13" fill="#0f172a" font-weight="600">alt</text>
+    <line x1="980" y1="454" x2="1220" y2="454" stroke="#2563eb" stroke-width="2"/>
+    <polygon points="1220,454 1210,448 1210,460" fill="#2563eb"/>
+    
+    <text x="1100.0" y="446" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">6· </tspan>Commit delta (batched, idempotent)</text>
+    <line x1="1220" y1="490" x2="980" y2="490" stroke="#2563eb" stroke-width="2"/>
+    <polygon points="980,490 990,484 990,496" fill="#2563eb"/>
+    
+    <text x="1100.0" y="482" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a">ack</text>
+    <line x1="980" y1="530" x2="700" y2="530" stroke="#2563eb" stroke-width="2"/>
+    <polygon points="700,530 710,524 710,536" fill="#2563eb"/>
+    
+    <text x="840.0" y="522" text-anchor="middle" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="14" fill="#0f172a"><tspan font-weight="700" fill="#2563eb">6· </tspan>Commit(delta) → fold into scalar</text>
+    
+    <rect x="865.0" y="554" width="230" height="56" rx="10" ry="10" fill="#f8fafc" stroke="#334155" stroke-dasharray="4,4"/>
+    <text x="877.0" y="574" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="13" fill="#0f172a">else skip:</text><text x="877.0" y="592" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="13" fill="#0f172a">below threshold and fresh</text>
+    
+<text x="1380" y="880" text-anchor="end" font-family="Inter,Segoe UI,Roboto,Arial,sans-serif" font-size="12" fill="#94a3b8">© Styled SVG export</text>
+
+</svg>
