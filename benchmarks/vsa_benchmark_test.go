@@ -21,9 +21,9 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"vsa"
 
 	"vsa/internal/ratelimiter/core"
-	"vsa/pkg/vsa"
 )
 
 // BenchmarkVSA_Update_Uncontended measures the raw performance of updating a single VSA instance

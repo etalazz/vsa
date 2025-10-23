@@ -22,8 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"vsa/pkg/vsa"
+	"vsa"
 )
 
 // managedVSA is a wrapper around a VSA instance that includes metadata

@@ -29,8 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"vsa/pkg/vsa"
+	"vsa"
 )
 
 type variantType string

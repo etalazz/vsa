@@ -24,8 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"vsa/pkg/vsa"
+	"vsa"
 )
 
 // Worker manages the background tasks for the VSA store, including

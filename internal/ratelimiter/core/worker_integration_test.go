@@ -24,8 +24,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"vsa/pkg/vsa"
+	"vsa"
 )
 
 // recordingPersister captures commits for assertions in tests.
