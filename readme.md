@@ -1,10 +1,34 @@
-# Commit information, not traffic
+<h1 align="center">Commit information, not traffic</h1>
 
-## Vector-Scalar Accumulator (VSA)
+<p align="center">
+  <img src="img.png" alt="VSA logo" width="160" style="max-width:160px;height:auto;" />
+</p>
+
+## Vector–Scalar Accumulator (VSA)
 
 A high-performance, in-memory data structure designed to track the state of volatile resources by filtering I/O overhead from self-canceling transactions.
 
 The VSA is an architectural pattern and data structure that provides guaranteed O(1) lookups and an O(1) memory footprint for resource counters, while minimizing expensive disk/network I/O operations in high-throughput systems.
+
+### Table of Contents
+- [1. The Problem: The I/O Bottleneck in Volatile Systems](#1-the-problem-the-io-bottleneck-in-volatile-systems)
+- [2. The Core Concept: A Physics-Inspired Approach](#2-the-core-concept-a-physics-inspired-approach)
+- [3. The Math Behind the VSA](#3-the-math-behind-the-vsa)
+  - [Structure Definition](#structure-definition)
+  - [Rule 1: The Cancellation Principle (Processing Actions)](#rule-1-the-cancellation-principle-processing-actions)
+  - [Rule 2: The O(1) Lookup Formula (Instantaneous Reads)](#rule-2-the-o1-lookup-formula-instantaneous-reads)
+  - [Rule 3: The Commit Condition (Deferred I/O)](#rule-3-the-commit-condition-deferred-io)
+- [4. Big O Notation Comparison](#4-big-o-notation-comparison)
+- [5. Ideal Use Cases](#5-ideal-use-cases)
+- [6. Specialized Applications: The Noise-Cancellation Pattern](#6-specialized-applications-the-noise-cancellation-pattern)
+- [7. Limitations](#7-limitations)
+- [8. Important Considerations](#8-important-considerations)
+- [9. Supercharging the VSA: Architectural Patterns for Scalability and Durability](#9-supercharging-the-vsa-architectural-patterns-for-scalability-and-durability)
+- [10. Reference Implementation: A High-Performance Rate Limiter](#10-reference-implementation-a-high-performance-rate-limiter)
+- [11. Benchmarks — Real-World Efficiency](#11-benchmarks--real-world-efficiency)
+- [12. Summary — Results at a glance](#12-summary--results-at-a-glance)
+
+---
 
 ## 1. The Problem: The I/O Bottleneck in Volatile Systems
 
@@ -55,7 +79,7 @@ A VSA tracks the state of any resource with two numbers:
 
 All updates are applied only to the `A_net` vector. An action and its opposite are commutative and will algebraically cancel each other out.
 
-```
+```text
 // Initial State: A_net = +100
 Process_Action(+50) // A_net becomes +150
 Process_Action(-50) // A_net returns to +100
@@ -67,7 +91,7 @@ The two actions resulted in zero net change to the system's state and required z
 
 The real-time available resource is always calculated on the fly with a simple, constant-time formula:
 
-```
+```text
 Available_Resources = S - |A_net|
 ```
 
@@ -77,7 +101,7 @@ This query is always O(1) because it's a single subtraction on data held in RAM,
 
 The expensive disk write to the Scalar `S` only occurs when the net uncommitted risk/load (`A_net`) exceeds a predefined business threshold.
 
-```
+```text
 IF |A_net| >= COMMIT_THRESHOLD THEN
     // Commit the net change
     S_new = S_old - A_net
