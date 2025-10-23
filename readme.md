@@ -1,5 +1,7 @@
 <h1 align="center">Commit information, not traffic</h1>
-
+<p align="center">
+  fewer DB calls, lower tail latency, smaller infra footprint.
+</p>
 <p align="center">
   <img src="img.png" alt="VSA logo" width="160" style="max-width:160px;height:auto;" />
 </p>
