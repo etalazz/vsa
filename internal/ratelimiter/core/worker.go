@@ -31,27 +31,41 @@ import (
 // Worker manages the background tasks for the VSA store, including
 // committing and evicting VSA instances.
 type Worker struct {
-	store            *Store
-	persister        Persister
-	commitThreshold  int64
-	commitInterval   time.Duration
-	evictionAge      time.Duration
-	evictionInterval time.Duration
-	stopChan         chan struct{}
-	wg               sync.WaitGroup
-	stopped          uint32
+	store              *Store
+	persister          Persister
+	commitThreshold    int64
+	lowCommitThreshold int64
+	commitInterval     time.Duration
+	commitMaxAge       time.Duration
+	evictionAge        time.Duration
+	evictionInterval   time.Duration
+	stopChan           chan struct{}
+	wg                 sync.WaitGroup
+	stopped            uint32
 }
 
 // NewWorker creates and configures a new background worker.
-func NewWorker(store *Store, persister Persister, commitThreshold int64, commitInterval, evictionAge, evictionInterval time.Duration) *Worker {
+//
+// commitThreshold: high watermark. When |vector| ≥ this value we attempt a commit.
+// lowCommitThreshold: low watermark (hysteresis). After a commit we require |vector| to fall
+//
+//	back below this value before re-arming another commit. Set 0 to disable hysteresis.
+//
+// commitInterval: how often we scan keys to decide whether to persist.
+// commitMaxAge: freshness bound. If a key has not changed for this long and has a non-zero
+//
+//	vector, we commit the remainder even if below the high watermark. Set 0 to disable.
+func NewWorker(store *Store, persister Persister, commitThreshold, lowCommitThreshold int64, commitInterval, commitMaxAge, evictionAge, evictionInterval time.Duration) *Worker {
 	return &Worker{
-		store:            store,
-		persister:        persister,
-		commitThreshold:  commitThreshold,
-		commitInterval:   commitInterval,
-		evictionAge:      evictionAge,
-		evictionInterval: evictionInterval,
-		stopChan:         make(chan struct{}),
+		store:              store,
+		persister:          persister,
+		commitThreshold:    commitThreshold,
+		lowCommitThreshold: lowCommitThreshold,
+		commitInterval:     commitInterval,
+		commitMaxAge:       commitMaxAge,
+		evictionAge:        evictionAge,
+		evictionInterval:   evictionInterval,
+		stopChan:           make(chan struct{}),
 	}
 }
 
@@ -103,12 +117,41 @@ func (w *Worker) runCommitCycle() {
 	var vsaToCommit []*vsa.VSA
 	var vectorsToCommit []int64
 
+	now := time.Now()
 	w.store.ForEach(func(key string, v *managedVSA) {
-		shouldCommit, vector := v.instance.CheckCommit(w.commitThreshold)
+		// Decide based on thresholds (with hysteresis) and optional max-age freshness.
+		_, vec := v.instance.State()
+		absVec := vec
+		if absVec < 0 {
+			absVec = -absVec
+		}
+		// High watermark check
+		commitByThreshold := absVec >= w.commitThreshold
+		// Max-age: commit if no recent changes and there is a remainder
+		last := atomic.LoadInt64(&v.lastAccessed)
+		commitByMaxAge := w.commitMaxAge > 0 && vec != 0 && now.Sub(time.Unix(0, last)) >= w.commitMaxAge
+
+		shouldCommit := false
+		if commitByThreshold {
+			if w.lowCommitThreshold <= 0 || v.armed.Load() {
+				shouldCommit = true
+			}
+		} else {
+			// Re-arm when we are below the low watermark to avoid flapping
+			if w.lowCommitThreshold > 0 && !v.armed.Load() && absVec <= w.lowCommitThreshold {
+				v.armed.Store(true)
+			}
+		}
+		if commitByMaxAge {
+			shouldCommit = true
+		}
+
 		if shouldCommit {
-			commits = append(commits, Commit{Key: key, Vector: vector})
+			commits = append(commits, Commit{Key: key, Vector: vec})
 			vsaToCommit = append(vsaToCommit, v.instance)
-			vectorsToCommit = append(vectorsToCommit, vector)
+			vectorsToCommit = append(vectorsToCommit, vec)
+			// Disarm to enforce low watermark before the next threshold-based commit
+			v.armed.Store(false)
 		}
 	})
 
@@ -178,7 +221,7 @@ func (w *Worker) runEvictionCycle() {
 	var keysToEvict []string
 	now := time.Now()
 
- w.store.ForEach(func(key string, v *managedVSA) {
+	w.store.ForEach(func(key string, v *managedVSA) {
 		last := atomic.LoadInt64(&v.lastAccessed)
 		if now.Sub(time.Unix(0, last)) > w.evictionAge {
 			keysToEvict = append(keysToEvict, key)

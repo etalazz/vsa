@@ -64,7 +64,7 @@ func TestIntegration_CommitReduction(t *testing.T) {
 	evictionAge := 1 * time.Minute      // Not relevant for this test
 	evictionInterval := 1 * time.Minute // Not relevant for this test
 
-	worker := NewWorker(store, persister, commitThreshold, commitInterval, evictionAge, evictionInterval)
+	worker := NewWorker(store, persister, commitThreshold, 0, commitInterval, 0, evictionAge, evictionInterval)
 	worker.Start()
 
 	// 2. Simulate High Volume of Requests

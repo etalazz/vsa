@@ -86,7 +86,7 @@ func TestWorker_RunCommitCycle_Integration(t *testing.T) {
 	// Non-relevant timings for a synchronous test
 	irrelevantTime := 1 * time.Hour
 	// Lower the commit threshold to 3 so keys a (3) and b (5) commit, c (2) does not.
-	w := NewWorker(store, rp, 3, irrelevantTime, irrelevantTime, irrelevantTime)
+	w := NewWorker(store, rp, 3, 0, irrelevantTime, 0, irrelevantTime, irrelevantTime)
 
 	// Trigger a single commit cycle synchronously.
 	w.runCommitCycle()
@@ -141,7 +141,7 @@ func TestWorker_RunEvictionCycle_Integration(t *testing.T) {
 	irrelevantTime := 1 * time.Hour
 	// Use a high commit threshold so it doesn't interfere
 	commitThreshold := int64(1000)
-	w := NewWorker(store, rp, commitThreshold, irrelevantTime, evictionAge, irrelevantTime)
+	w := NewWorker(store, rp, commitThreshold, 0, irrelevantTime, 0, evictionAge, irrelevantTime)
 
 	// Create two keys: one stale with non-zero vector (should commit then evict), one fresh (should stay)
 	stale := store.GetOrCreate("stale")
@@ -205,7 +205,7 @@ func TestVSAAvailableThroughWorkerFlow(t *testing.T) {
 func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
 	store := NewStore(100)
 	rp := &recordingPersister{}
-	w := NewWorker(store, rp, 3, 10*time.Millisecond, time.Hour, time.Hour)
+	w := NewWorker(store, rp, 3, 0, 10*time.Millisecond, 0, time.Hour, time.Hour)
 
 	v := store.GetOrCreate("tick-key")
 	v.Update(3) // meets threshold
@@ -230,7 +230,7 @@ func TestWorker_CommitLoop_StopTriggersFinalRemainderFlush(t *testing.T) {
 	store := NewStore(100)
 	rp := &recordingPersister{}
 	// Long interval so tick does not fire before Stop
-	w := NewWorker(store, rp, 10, time.Hour, time.Hour, time.Hour)
+	w := NewWorker(store, rp, 10, 0, time.Hour, 0, time.Hour, time.Hour)
 
 	v := store.GetOrCreate("stop-key")
 	for i := 0; i < 11; i++ {
@@ -264,7 +264,7 @@ func TestWorker_CommitLoop_StopTriggersFinalRemainderFlush(t *testing.T) {
 func TestWorker_EvictionLoop_TickEvictsStale(t *testing.T) {
 	store := NewStore(100)
 	rp := &recordingPersister{}
-	w := NewWorker(store, rp, 1000, time.Hour, 5*time.Millisecond, 5*time.Millisecond)
+	w := NewWorker(store, rp, 1000, 0, time.Hour, 0, 5*time.Millisecond, 5*time.Millisecond)
 
 	stale := store.GetOrCreate("stale-tick")
 	for i := 0; i < 4; i++ {

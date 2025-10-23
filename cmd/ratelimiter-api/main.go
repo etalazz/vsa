@@ -82,12 +82,16 @@ func main() {
 	// - rate_limit: per-key budget (scalar S). Example: 1000 requests allowed
 	// - commit_threshold: batch size; higher = fewer DB writes, but slightly older persisted state
 	// - commit_interval: how often we check to commit (background)
+	// - commit_low_watermark: low watermark (hysteresis) to avoid rapid on/off commits
+	// - commit_max_age: freshness bound to commit sub-threshold remainders after idle periods
 	// - eviction_age: how long a key can sit idle before we drop it from memory
 	// - eviction_interval: how often we scan for idle keys
 	// - http_addr: where the HTTP API listens
 	rateLimit := flag.Int64("rate_limit", 1000, "Per-key rate limit (scalar S) — total allowed requests")
-	commitThreshold := flag.Int64("commit_threshold", 50, "Batching threshold for background commits; higher = fewer DB writes")
+	commitThreshold := flag.Int64("commit_threshold", 50, "High watermark for background commits; higher = fewer DB writes (but slightly older persisted state)")
+	commitLowWatermark := flag.Int64("commit_low_watermark", 0, "Low watermark (hysteresis). After a commit we wait until |vector| falls below this value before re-arming another commit. Set 0 to disable.")
 	commitInterval := flag.Duration("commit_interval", 100*time.Millisecond, "How often the background worker checks whether to persist")
+	commitMaxAge := flag.Duration("commit_max_age", 0, "Freshness bound for idle periods. If a key hasn’t changed for this long and has a non-zero remainder, we commit even if below the high watermark. Set 0 to disable.")
 	evictionAge := flag.Duration("eviction_age", time.Hour, "Evict keys that haven’t been touched for this long")
 	evictionInterval := flag.Duration("eviction_interval", 10*time.Minute, "How often to scan for idle keys to evict")
 	httpAddr := flag.String("http_addr", ":8080", "HTTP listen address (e.g., :8080)")
@@ -103,10 +107,12 @@ func main() {
 	worker := core.NewWorker(
 		store,
 		persister,
-		*commitThreshold,  // Commit Threshold: batch size before persisting
-		*commitInterval,   // Commit Interval: how often we check to persist
-		*evictionAge,      // Eviction Age: idle time before a key can be dropped
-		*evictionInterval, // Eviction Interval: how often we scan for idle keys
+		*commitThreshold,    // High watermark before persisting (batch size)
+		*commitLowWatermark, // Low watermark (hysteresis) — fall below this to re-arm
+		*commitInterval,     // How often we check to persist
+		*commitMaxAge,       // Freshness bound for idle periods (0 disables)
+		*evictionAge,        // Idle time before a key can be dropped
+		*evictionInterval,   // How often we scan for idle keys
 	)
 	worker.Start()
 

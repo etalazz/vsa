@@ -27,11 +27,24 @@ import (
 )
 
 // managedVSA is a wrapper around a VSA instance that includes metadata
-// required for managing its lifecycle, like its last access time.
+// required for managing its lifecycle, like its last access time and
+// hysteresis state used by the background committer.
+//
+// armed implements a simple high/low watermark (hysteresis):
+//   - When true, a key is eligible to commit as soon as it reaches the high
+//     threshold (commit_threshold).
+//   - After a commit we set armed=false. The key must fall back below the low
+//     watermark (commit_low_watermark) before being re-armed to avoid rapid
+//     on/off commits when traffic hovers around the threshold.
+//     This field is only read/modified by background routines.
+//
+// lastAccessed is updated on every hot-path access and is used for eviction
+// and optional max-age flushes.
 type managedVSA struct {
-	instance     *vsa.VSA
+	instance *vsa.VSA
 	// lastAccessed stores the last access time in UnixNano to allow atomic access across goroutines.
 	lastAccessed int64
+	armed        atomic.Bool
 }
 
 // Store manages a collection of VSA instances in memory.
@@ -55,9 +68,11 @@ func NewStore(initialScalar int64) *Store {
 func (s *Store) GetOrCreate(key string) *vsa.VSA {
 	// In a real system, you would fetch the initial scalar from a database here.
 	// For the rate limiter, the scalar is the rate limit (total allowed requests).
- newVSA := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: time.Now().UnixNano()}
+	newManaged := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: time.Now().UnixNano()}
+	// Newly created keys start in the "armed" state so they can commit once they reach the high watermark.
+	newManaged.armed.Store(true)
 
-	actual, _ := s.counters.LoadOrStore(key, newVSA)
+	actual, _ := s.counters.LoadOrStore(key, newManaged)
 	managed := actual.(*managedVSA)
 
 	// Update the last accessed time on every access.
