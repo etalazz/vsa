@@ -46,3 +46,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Notes
 - The harness reports comparable metrics (latency percentiles, logical writes, dbCalls) for all variants including VSA, Atomic, Batch, CRDT, Token, and Leaky.
 - Defaults are chosen for reproducibility; parameters can be overridden via environment variables or flags as documented in the harness README.
+
+
+## [2025-10-22] (continued)
+### Optimized
+- Store.GetOrCreate now uses lazy allocation on misses to eliminate allocations on hits. This removes the previous ~8.3 KiB/op, 4 allocs/op cost seen in concurrent benchmarks when the key already existed.
+  - Benchmark validation (i9-12900HK example): `BenchmarkStore_GetOrCreate_Concurrent` → ~7.3 ns/op, 0 B/op, 0 allocs/op.
+- Microbenchmarks confirm the VSA hot path remains allocation‑free and extremely fast:
+  - `BenchmarkVSA_Update_Uncontended` ≈ ~8–9 ns/op.
+  - `BenchmarkVSA_Update_Concurrent` scales well; ~36–41 ns/op at high CPU parallelism, reflecting expected cache‑coherency costs while keeping zero allocations.
+
