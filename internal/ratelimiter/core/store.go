@@ -65,20 +65,33 @@ func NewStore(initialScalar int64) *Store {
 
 // GetOrCreate returns the VSA instance for a given key.
 // It also updates the lastAccessed timestamp for the instance.
+//
+// Optimization: avoid allocating on the common case where the key already exists.
+// We first try a plain Load (no allocation). Only on a miss do we allocate the
+// managedVSA + VSA and attempt a LoadOrStore. In a race where another goroutine
+// creates the key first, the extra allocation is rare and immediately discarded.
 func (s *Store) GetOrCreate(key string) *vsa.VSA {
-	// In a real system, you would fetch the initial scalar from a database here.
-	// For the rate limiter, the scalar is the rate limit (total allowed requests).
-	newManaged := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: time.Now().UnixNano()}
+	// Fast path: key already present → no allocations.
+	if actual, ok := s.counters.Load(key); ok {
+		managed := actual.(*managedVSA)
+		atomic.StoreInt64(&managed.lastAccessed, time.Now().UnixNano())
+		return managed.instance
+	}
+
+	// Miss: lazily allocate only now.
+	now := time.Now().UnixNano()
+	newManaged := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: now}
 	// Newly created keys start in the "armed" state so they can commit once they reach the high watermark.
 	newManaged.armed.Store(true)
 
-	actual, _ := s.counters.LoadOrStore(key, newManaged)
-	managed := actual.(*managedVSA)
-
-	// Update the last accessed time on every access.
-	atomic.StoreInt64(&managed.lastAccessed, time.Now().UnixNano())
-
-	return managed.instance
+	// Try to publish; if another goroutine won the race, reuse that instance.
+	if actual, loaded := s.counters.LoadOrStore(key, newManaged); loaded {
+		managed := actual.(*managedVSA)
+		atomic.StoreInt64(&managed.lastAccessed, now)
+		return managed.instance
+	}
+	// We stored our new instance.
+	return newManaged.instance
 }
 
 // ForEach allows iterating over all managed VSA instances in the store.

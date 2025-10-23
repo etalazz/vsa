@@ -55,7 +55,8 @@ try {
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "go"
-    $psi.ArgumentList.AddRange($args)
+    foreach ($a in $args) { $psi.ArgumentList.Add($a) }
+    $psi.WorkingDirectory = (Get-Location).Path
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
