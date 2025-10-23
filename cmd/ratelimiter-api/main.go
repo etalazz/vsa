@@ -103,10 +103,10 @@ func main() {
 	worker := core.NewWorker(
 		store,
 		persister,
-		*commitThreshold,   // Commit Threshold: batch size before persisting
-		*commitInterval,    // Commit Interval: how often we check to persist
-		*evictionAge,       // Eviction Age: idle time before a key can be dropped
-		*evictionInterval,  // Eviction Interval: how often we scan for idle keys
+		*commitThreshold,  // Commit Threshold: batch size before persisting
+		*commitInterval,   // Commit Interval: how often we check to persist
+		*evictionAge,      // Eviction Age: idle time before a key can be dropped
+		*evictionInterval, // Eviction Interval: how often we scan for idle keys
 	)
 	worker.Start()
 
