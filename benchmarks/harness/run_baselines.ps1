@@ -76,6 +76,40 @@ try {
   }
 
   function Parse-Result($text) {
+    # Try machine-readable Summary first
+    $sumLine = ($text -split "`n") | Where-Object { $_ -match '^Summary:' } | Select-Object -First 1
+    if ($sumLine) {
+      $fields = @{}
+      foreach ($kv in ($sumLine -replace '^Summary:\s+', '') -split '\s+') {
+        if ($kv -match '=') {
+          $parts = $kv -split '=', 2
+          $fields[$parts[0]] = $parts[1]
+        }
+      }
+      $variant = $fields['variant']
+      $ops = [int64]$fields['ops']
+      $durNs = [double]$fields['duration_ns']
+      $durSec = $durNs / 1e9
+      $p50us = [double]$fields['p50_ns'] / 1000.0
+      $p95us = [double]$fields['p95_ns'] / 1000.0
+      $p99us = [double]$fields['p99_ns'] / 1000.0
+      $wlog = [int64]$fields['logical_writes']
+      $dbc = [int64]$fields['db_calls']
+      $opsPerSec = if ($durSec -gt 0) { [math]::Round($ops / $durSec, 1) } else { 0 }
+      $opsPerKey = if ($durSec -gt 0 -and ${keys} -gt 0) { [math]::Round(($ops / $durSec) / [double]$keys, 1) } else { 0 }
+      $dbcPerSec = if ($durSec -gt 0) { [math]::Round($dbc / $durSec, 1) } else { 0 }
+      $wlogPerSec = if ($durSec -gt 0) { [math]::Round($wlog / $durSec, 1) } else { 0 }
+      $opsPerDb = if ($dbc -gt 0) { [math]::Round($ops / [double]$dbc, 3) } else { [double]::NaN }
+      $durHuman = (Parse-Metric $text '^Duration:\s+([^\s]+)' 1)
+      if (-not $durHuman) { $durHuman = "{0:N3}s" -f $durSec }
+      return [PSCustomObject]@{
+        variant=$variant; ops=$ops; duration=$durHuman; ops_per_sec=$opsPerSec;
+        p50_us=('{0:N3}' -f $p50us); p95_us=('{0:N3}' -f $p95us); p99_us=('{0:N3}' -f $p99us);
+        logical_writes=$wlog; db_calls=$dbc; ops_per_db=$opsPerDb; ops_per_sec_calc=$opsPerSec;
+        ops_per_sec_per_key=$opsPerKey; db_calls_per_sec=$dbcPerSec; logical_writes_per_sec=$wlogPerSec
+      }
+    }
+    # Legacy parsing fallback
     $variant = Parse-Metric $text '^Variant:\s+(\w+)' 1
     $ops = Parse-Metric $text 'Ops:\s+(\d+)' 1
     $dur = Parse-Metric $text '^Duration:\s+([^\s]+)' 1
@@ -87,7 +121,8 @@ try {
     $dbc = (Parse-Metric $text 'dbCalls=([0-9,]+)' 1) -replace ',', ''
     return [PSCustomObject]@{
       variant = $variant; ops = [int64]$ops; duration = $dur; ops_per_sec = $opssec;
-      p50_us = $p50; p95_us = $p95; p99_us = $p99; logical_writes = [int64]$wlog; db_calls = [int64]$dbc
+      p50_us = $p50; p95_us = $p95; p99_us = $p99; logical_writes = [int64]$wlog; db_calls = [int64]$dbc;
+      ops_per_db=$null; ops_per_sec_calc=$null; ops_per_sec_per_key=$null; db_calls_per_sec=$null; logical_writes_per_sec=$null
     }
   }
 
@@ -101,10 +136,10 @@ try {
     $results += (Parse-Result $out)
   }
 
-  # Print concise TSV for spreadsheets
-  Write-Host "`nVariant	Ops	Duration	Ops/sec	P50(us)	P95(us)	P99(us)	LogicalWrites	DBCalls" -ForegroundColor Green
+  # Print concise TSV for spreadsheets (includes derived apples-to-apples metrics)
+  Write-Host "`nVariant	Ops	Duration	Ops/sec	P50(us)	P95(us)	P99(us)	LogicalWrites	DBCalls	OpsPerDBCall	Ops/sec(calc)	Ops/sec/key	DBCalls/sec	LogicalWrites/sec" -ForegroundColor Green
   foreach ($r in $results) {
-    Write-Host ("{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}`t{8}" -f $r.variant,$r.ops,$r.duration,$r.ops_per_sec,$r.p50_us,$r.p95_us,$r.p99_us,$r.logical_writes,$r.db_calls)
+    Write-Host ("{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}`t{7}`t{8}`t{9}`t{10}`t{11}`t{12}`t{13}" -f $r.variant,$r.ops,$r.duration,$r.ops_per_sec,$r.p50_us,$r.p95_us,$r.p99_us,$r.logical_writes,$r.db_calls,$r.ops_per_db,$r.ops_per_sec_calc,$r.ops_per_sec_per_key,$r.db_calls_per_sec,$r.logical_writes_per_sec)
   }
 }
 finally {

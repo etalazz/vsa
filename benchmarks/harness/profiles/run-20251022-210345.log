@@ -1,0 +1,10 @@
+Variant: vsa  Ops: 1007561043  Goroutines: 32  Keys: 128  Churn: 50%
+Duration: 1m0s  Ops/sec: 16.8M
+Latency p50: 0.000µs  p95: 0.000µs  p99: 0.000µs
+Latency histogram (non-zero buckets):
+Writes: logical=10,796 (180/sec), dbCalls=10,796 (180/sec)
+Memory: Alloc=1.5 GiB  TotalAlloc=67.6 TiB  Sys=65.7 GiB  NumGC=6436
+Contention (long ops >5× median): 0
+Summary: variant=vsa ops=1007561043 duration_ns=60000483000 goroutines=32 keys=128 churn_pct=50 p50_ns=0 p95_ns=0 p99_ns=0 logical_writes=10796 db_calls=10796 write_delay_ns=50000
+VSA |A_net| total: max=15,285,183 avg=7,453,324 final=0 (units)
+VSA commits: total=10796 | intervals min=328.7µs avg=7.64852ms max=160.4277ms

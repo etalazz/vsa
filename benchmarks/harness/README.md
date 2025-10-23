@@ -118,10 +118,151 @@ Environment variables can override defaults (useful for CI):
 - HARNESS_THRESHOLD, HARNESS_LOW_THRESHOLD, HARNESS_MAX_AGE, HARNESS_COMMIT_INTERVAL
 - HARNESS_RATE, HARNESS_BURST
 
-The script prints the tail of each run for inspection and then emits a one-line-per-variant TSV summary with:
-Variant, Ops, Duration, Ops/sec, P50(us), P95(us), P99(us), LogicalWrites, DBCalls.
+The harness also emits a single machine-readable Summary line per run, for example:
+
+Summary: variant=vsa ops=13932835 duration_ns=769123456 goroutines=32 keys=128 churn_pct=50 p50_ns=456 p95_ns=812 p99_ns=2100 logical_writes=808 db_calls=808 write_delay_ns=50000
+
+The shell and PowerShell baseline scripts parse that line and print a TSV per variant with both raw and derived apples-to-apples metrics:
+- Variant, Ops, Duration, Ops/sec, P50(us), P95(us), P99(us), LogicalWrites, DBCalls
+- Plus derived: OpsPerDBCall, Ops/sec(calc), Ops/sec/key, DBCalls/sec, LogicalWrites/sec
+
+This lets you normalize by datastore work and compare variants under equal persistence pressure.
+
+## Helper scripts (sh)
+Two small helper scripts are included for common workflows:
+
+- capture_pprof.sh: Launch the harness with -pprof=true and capture CPU and heap profiles to benchmarks/harness/profiles.
+  Usage:
+  
+  sh benchmarks/harness/capture_pprof.sh
+  
+  Environment variables can tweak the run; by default it profiles the VSA variant for 60s with latency sampling disabled to keep profiles clean.
+
+- sweep.sh: Run automated apples-to-apples sweeps and write a consolidated TSV (default: sweep_results.tsv).
+  It sweeps HARNESS_WRITE_DELAY over 0us, 50us, 200us, 1ms and VSA’s HARNESS_COMMIT_INTERVAL over 1ms, 2ms, 5ms combined with HARNESS_THRESHOLD 128, 192, 256.
+  Usage:
+  
+  sh benchmarks/harness/sweep.sh [out-file]
+
+## Allocation note for duration-based runs
+For long, duration-based runs (-duration > 0), the harness now bounds latency sampling allocations using a fixed-cap per-worker reservoir sampler. The total cap obeys -max_latency_samples and the sampling density is set by -sample_every. This prevents slice growth and large TotalAlloc/Sys figures in long runs.
+
+Tips:
+- For clean pprof captures, set -max_latency_samples=0 -sample_every=0 (disabled).
+- Otherwise, pick a sparse -sample_every (e.g., 64–4096) and a modest -max_latency_samples (e.g., 200k).
 
 ## Notes
 - CRDT here is a minimal PN-counter simulation. Each op writes locally; merges exchange max() and count as additional db calls. It is meant to provide a baseline comparison, not a full CRDT framework.
 - This harness is single-process; distributed effects (e.g., cross-node latency) are not modeled.
 - For apples-to-apples, keep the same `-write_delay` across runs.
+
+
+## Summary of recent findings (October 2025)
+
+This section turns the benchmark numbers into plain-language takeaways and offers simple tuning recipes. It’s written to be useful for both engineers and non‑specialists evaluating trade‑offs.
+
+- What we measure in a nutshell
+  - Ops/sec: how many updates we can handle per second on the “hot path” (in‑memory work).
+  - Latency (p50/p95/p99): how long a single update takes on the hot path. For VSA this is often near zero because the work is a few CPU instructions.
+  - LogicalWrites: how many individual events would be written to storage (the “amount of data” recorded).
+  - DBCalls: how many times we call the datastore (the main cost driver in real systems).
+  - Apples‑to‑apples metrics we compute for you in the TSV output: DBCalls/sec, LogicalWrites/sec, Ops/sec/key, and Ops per DB call. These let you compare variants under the same persistence pressure.
+
+- Headline results under a realistic setting (example)
+  - Setup: 32 workers, 128 keys, churn 50%, simulated storage delay write_delay=50µs.
+  - Token / Leaky (classic rate limiters):
+    - ~25k–27k ops/sec
+    - p50 latency around 1.15–1.20 ms
+    - ~2 DB calls per operation → ~50k DB calls/sec
+  - VSA (Vector–Scalar Accumulator):
+    - 16–18 million ops/sec on the hot path
+    - p50/p95/p99 often show as 0.000 µs (see FAQ below)
+    - ~0.9k–1.3k DB calls/sec total (about 6–10 commits per key per second)
+    - 13k–17k ops per single DB call (massive amortization)
+
+- What “0.000 µs” means for VSA
+  - Many VSA updates are faster than the clock’s tick on typical machines. When at least half of measurements are below that tick, medians and tails can appear as 0.000 µs. It simply means “well under one microsecond.” For charting, use the exact nanosecond values in the Summary line (p50_ns, p95_ns, p99_ns).
+
+- Memory/GC note (long runs)
+  - If you run for tens of seconds or more, measurement itself can add overhead. The harness now uses bounded sampling in duration mode, but for the cleanest memory/CPU profiles you can disable latency sampling entirely:
+    - Flags: -max_latency_samples=0 -sample_every=0
+
+### Tuning recipes (copy/paste)
+Pick the one that matches your goals. All examples assume VSA, 32 workers, 128 keys.
+
+<table style="border-collapse:separate;border-spacing:0;width:100%;font-size:14px;">
+  <thead>
+    <tr>
+      <th style="background:#0f172a;color:#fff;padding:10px 12px;border-top-left-radius:8px;text-align:left;">Goal</th>
+      <th style="background:#0f172a;color:#fff;padding:10px 12px;text-align:left;">Recommended flags</th>
+      <th style="background:#0f172a;color:#fff;padding:10px 12px;text-align:left;">Expected DBCalls/sec</th>
+      <th style="background:#0f172a;color:#fff;padding:10px 12px;text-align:left;">Hot‑path latency</th>
+      <th style="background:#0f172a;color:#fff;padding:10px 12px;border-top-right-radius:8px;text-align:left;">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background:#e0f2fe;">
+      <td style="padding:10px 12px;">
+        <span style="background:#2563eb;color:#fff;padding:2px 10px;border-radius:999px;font-weight:600;">Balanced default</span>
+        <div style="color:#0f172a;opacity:.8;margin-top:6px;">Good freshness, modest DB cost</div>
+      </td>
+      <td style="padding:10px 12px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">
+        -commit_interval=1ms -threshold=192 -low_threshold=96 -commit_max_age=20ms
+      </td>
+      <td style="padding:10px 12px;"><b>~1.1k–1.3k</b> total (≈8–10 per key/sec)</td>
+      <td style="padding:10px 12px;">~0 µs (typically sub‑µs)</td>
+      <td style="padding:10px 12px;">Solid default; keeps state reasonably fresh without stressing storage.</td>
+    </tr>
+    <tr style="background:#dcfce7;">
+      <td style="padding:10px 12px;">
+        <span style="background:#16a34a;color:#fff;padding:2px 10px;border-radius:999px;font-weight:600;">Lower database pressure</span>
+        <div style="color:#0f172a;opacity:.8;margin-top:6px;">Fewer commits to storage</div>
+      </td>
+      <td style="padding:10px 12px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">
+        -commit_interval=5ms -threshold=256 -low_threshold=128 -commit_max_age=20ms
+      </td>
+      <td style="padding:10px 12px;"><b>~0.8k</b> total (≈6 per key/sec)</td>
+      <td style="padding:10px 12px;">~0 µs (sub‑µs)</td>
+      <td style="padding:10px 12px;">Reduces storage load. Accept slightly older persisted state between commits.</td>
+    </tr>
+    <tr style="background:#ffedd5;">
+      <td style="padding:10px 12px;">
+        <span style="background:#ea580c;color:#fff;padding:2px 10px;border-radius:999px;font-weight:600;">Fresher storage state</span>
+        <div style="color:#0f172a;opacity:.8;margin-top:6px;">More frequent commits</div>
+      </td>
+      <td style="padding:10px 12px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">
+        -commit_interval=1ms -threshold=128 -low_threshold=64 -commit_max_age=10–15ms
+      </td>
+      <td style="padding:10px 12px;"><b>~1.3k</b> total (≈10 per key/sec)</td>
+      <td style="padding:10px 12px;">~0 µs (sub‑µs)</td>
+      <td style="padding:10px 12px;">Persists more often for tighter materialization bounds.</td>
+    </tr>
+  </tbody>
+</table>
+
+Tip:
+- Choose <code>write_delay</code> to mimic your datastore. For fast local/redis‑like latencies use 50–200 µs; for slower SQL or cloud storage, 1 ms is a good stress point.
+- Keep <code>low_threshold</code> ≈ half of <code>threshold</code> to avoid rapid oscillations around the boundary (hysteresis).
+
+### Making fair comparisons (apples‑to‑apples)
+- Keep write_delay the same for all variants.
+- Look at DBCalls/sec and LogicalWrites/sec to compare storage load directly.
+- Use Ops/sec/key to reason about per‑key throughput.
+- Our sweep.sh script automates common sweeps (0us, 50us, 200us, 1ms for write_delay, and VSA commit_interval × threshold) and writes a consolidated TSV.
+
+### How to capture a heap profile (two easy ways)
+
+1) One‑command helper (recommended)
+- sh benchmarks/harness/capture_pprof.sh
+- It launches the harness with -pprof=true, waits a moment, and saves CPU and heap profiles under benchmarks/harness/profiles/.
+
+2) Manual steps
+- Start the harness so it stays up long enough to connect:
+  - Example: go run ./benchmarks/harness -variant=vsa -duration=60s -pprof=true -keys=128 -threshold=192 -low_threshold=96 -commit_interval=1ms -commit_max_age=20ms -write_delay=50us
+- In another terminal, while it’s still running:
+  - CPU (20s): go tool pprof -http=localhost:8080 http://127.0.0.1:6060/debug/pprof/profile?seconds=20
+  - Heap (live objects): go tool pprof -http=localhost:8081 http://127.0.0.1:6060/debug/pprof/heap
+- Tip: Prefer 127.0.0.1 over localhost on Windows to avoid IPv6 issues.
+
+These profiles help you see where time and memory go, independent of the algorithm.
+

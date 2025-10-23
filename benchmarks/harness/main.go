@@ -691,6 +691,14 @@ func main() {
 	recordLatency := *maxLatSamples != 0
 
 	latSlices := make([][]time.Duration, *workers)
+	// Cap per-worker latency storage in duration mode using reservoir sampling
+	capPerWorker := 0
+	if recordLatency && *maxLatSamples > 0 {
+		capPerWorker = *maxLatSamples / *workers
+		if capPerWorker < 1 {
+			capPerWorker = 1
+		}
+	}
 	for g := 0; g < *workers; g++ {
 		go func(id int) {
 			defer wg.Done()
@@ -703,8 +711,18 @@ func main() {
 			}
 			var loc []time.Duration
 			if recordLatency {
-				loc = make([]time.Duration, 0, (len(ks)+sample-1)/sample)
+				if durationMode && capPerWorker > 0 {
+					loc = make([]time.Duration, 0, capPerWorker)
+				} else {
+					loc = make([]time.Duration, 0, (len(ks)+sample-1)/sample)
+				}
 			}
+			// rng for reservoir sampling
+			var rndLoc *rand.Rand
+			if durationMode && recordLatency && capPerWorker > 0 {
+				rndLoc = rand.New(rand.NewPCG(uint64(*seed), uint64(id)+12345))
+			}
+			totalSeen := 0
 			if durationMode {
 				// Run until deadline; cycle over pre-generated ops to avoid allocs
 				for i := 0; ; i++ {
@@ -715,7 +733,20 @@ func main() {
 					if recordLatency && (sample == 1 || (i%sample) == 0) {
 						t0 := time.Now()
 						prod.update(ks[idx], ds[idx])
-						loc = append(loc, time.Since(t0))
+						d := time.Since(t0)
+						if capPerWorker > 0 {
+							totalSeen++
+							if totalSeen <= capPerWorker {
+								loc = append(loc, d)
+							} else {
+								j := rndLoc.IntN(totalSeen)
+								if j < capPerWorker {
+									loc[j] = d
+								}
+							}
+						} else {
+							loc = append(loc, d)
+						}
 					} else {
 						prod.update(ks[idx], ds[idx])
 					}
@@ -801,7 +832,8 @@ func main() {
 	actualOps := opsDone.Load()
 	fmt.Printf("Variant: %s  Ops: %d  Goroutines: %d  Keys: %d  Churn: %d%%\n", v, actualOps, *workers, *keysN, *churnPct)
 	fmt.Printf("Duration: %s  Ops/sec: %s\n", runDur.Round(time.Millisecond), humanRate(float64(actualOps)/runDur.Seconds()))
-	fmt.Printf("Latency p50: %.1fµs  p95: %.1fµs  p99: %.1fµs\n", float64(med)/1e3, float64(p95)/1e3, float64(p99)/1e3)
+	// Print latencies with adaptive precision to avoid clamped zeros
+	fmt.Printf("Latency p50: %sµs  p95: %sµs  p99: %sµs\n", formatMicros(med), formatMicros(p95), formatMicros(p99))
 	fmt.Println("Latency histogram (non-zero buckets):")
 	for _, b := range hist {
 		fmt.Printf("  %s: %d\n", b.label, b.count)
@@ -812,6 +844,10 @@ func main() {
 	fmt.Printf("Memory: Alloc=%s  TotalAlloc=%s  Sys=%s  NumGC=%d\n",
 		humanBytes(ms.Alloc), humanBytes(ms.TotalAlloc), humanBytes(ms.Sys), ms.NumGC)
 	fmt.Printf("Contention (long ops >5× median): %d\n", m.longOps)
+
+	// Machine-readable one-line summary for scripts
+	fmt.Printf("Summary: variant=%s ops=%d duration_ns=%d goroutines=%d keys=%d churn_pct=%d p50_ns=%d p95_ns=%d p99_ns=%d logical_writes=%d db_calls=%d write_delay_ns=%d\n",
+		v, actualOps, runDur.Nanoseconds(), *workers, *keysN, *churnPct, int64(med), int64(p95), int64(p99), p.logicalWrites.Load(), p.dbCalls.Load(), int64(p.writeDelay))
 
 	// VSA-specific metrics
 	if v == variantVSA {
@@ -899,6 +935,19 @@ func percentiles(durations []time.Duration, p int) time.Duration {
 	sort.Slice(copyArr, func(i, j int) bool { return copyArr[i] < copyArr[j] })
 	idx := (len(copyArr) - 1) * p / 100
 	return copyArr[idx]
+}
+
+// formatMicros returns a string with microseconds value using adaptive precision
+// to avoid clamped zeros for sub-microsecond durations.
+func formatMicros(d time.Duration) string {
+	us := float64(d) / 1e3 // d is ns
+	if us < 1 {
+		return fmt.Sprintf("%.3f", us)
+	}
+	if us < 100 {
+		return fmt.Sprintf("%.1f", us)
+	}
+	return fmt.Sprintf("%.0f", us)
 }
 
 func humanInt(n int64) string {

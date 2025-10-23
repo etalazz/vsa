@@ -33,6 +33,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -76,13 +77,25 @@ func main() {
 	//
 	// Enjoy the demo!
 
-	// 1. Initialize all the core components.
-	// In a real app, the persister would be a real database client.
-	// In a real app, these values would come from a config file or env vars.
-	rateLimit := int64(1000) // Rate limit of 1000 requests
+	// 1. Parse configuration flags (these double as production-ready knobs).
+	// Developers: these control when we batch to storage and how we manage memory.
+	// - rate_limit: per-key budget (scalar S). Example: 1000 requests allowed
+	// - commit_threshold: batch size; higher = fewer DB writes, but slightly older persisted state
+	// - commit_interval: how often we check to commit (background)
+	// - eviction_age: how long a key can sit idle before we drop it from memory
+	// - eviction_interval: how often we scan for idle keys
+	// - http_addr: where the HTTP API listens
+	rateLimit := flag.Int64("rate_limit", 1000, "Per-key rate limit (scalar S) — total allowed requests")
+	commitThreshold := flag.Int64("commit_threshold", 50, "Batching threshold for background commits; higher = fewer DB writes")
+	commitInterval := flag.Duration("commit_interval", 100*time.Millisecond, "How often the background worker checks whether to persist")
+	evictionAge := flag.Duration("eviction_age", time.Hour, "Evict keys that haven’t been touched for this long")
+	evictionInterval := flag.Duration("eviction_interval", 10*time.Minute, "How often to scan for idle keys to evict")
+	httpAddr := flag.String("http_addr", ":8080", "HTTP listen address (e.g., :8080)")
+	flag.Parse()
 
+	// 2. Initialize core components.
 	persister := core.NewMockPersister()
-	store := core.NewStore(rateLimit) // Initialize with rate limit as scalar
+	store := core.NewStore(*rateLimit) // Initialize store with the rate limit as the scalar
 
 	// 2. Create and start the background worker.
 	// The worker handles the critical tasks of committing VSA vectors to persistent
@@ -90,17 +103,17 @@ func main() {
 	worker := core.NewWorker(
 		store,
 		persister,
-		50,                   // Commit Threshold
-		100*time.Millisecond, // Commit Interval
-		1*time.Hour,          // Eviction Age
-		10*time.Minute,       // Eviction Interval
+		*commitThreshold,   // Commit Threshold: batch size before persisting
+		*commitInterval,    // Commit Interval: how often we check to persist
+		*evictionAge,       // Eviction Age: idle time before a key can be dropped
+		*evictionInterval,  // Eviction Interval: how often we scan for idle keys
 	)
 	worker.Start()
 
 	// 3. Create the API server.
 	// The server handles the incoming HTTP requests and uses the store to
 	// perform the rate-limiting checks.
-	apiServer := api.NewServer(store, rateLimit)
+	apiServer := api.NewServer(store, *rateLimit)
 
 	// 4. Set up the HTTP server and routes.
 	// Using the ListenAndServe method from the api.Server is not ideal for graceful
@@ -108,15 +121,15 @@ func main() {
 	mux := http.NewServeMux()
 	apiServer.RegisterRoutes(mux)
 	httpServer := &http.Server{
-		Addr:    ":8080",
+		Addr:    *httpAddr,
 		Handler: mux,
 	}
 
 	// 5. Start the HTTP server in a separate goroutine so it doesn't block.
 	go func() {
-		fmt.Println("Rate limiter API server listening on :8080")
+		fmt.Printf("Rate limiter API server listening on %s\n", *httpAddr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Could not listen on :8080: %v\n", err)
+			log.Fatalf("Could not listen on %s: %v\n", *httpAddr, err)
 		}
 	}()
 
