@@ -5,6 +5,11 @@
 <p align="center">
   <img src="img.png" alt="VSA logo" width="160" style="max-width:160px;height:auto;" />
 </p>
+<p align="center">
+  <a href="./docs/FAQ.md" title="Start here: Read the FAQ first">
+    <img src="https://img.shields.io/badge/Start%20here%20%E2%86%92-Read%20the%20FAQ-blue?style=for-the-badge" alt="Start here: Read the FAQ first">
+  </a>
+</p>
 
 ## Vector–Scalar Accumulator (VSA)
 
