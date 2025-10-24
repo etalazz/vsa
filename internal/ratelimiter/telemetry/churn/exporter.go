@@ -272,8 +272,18 @@ func exporterObserveBatchInternal(size int) {
 }
 
 // Utilities
-func max64(a, b int64) int64 { if a > b { return a }; return b }
-func abs64(n int64) int64 { if n < 0 { return -n }; return n }
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+func abs64(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
 
 // --- Live rendering and coloring helpers ---
 
