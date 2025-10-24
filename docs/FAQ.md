@@ -360,6 +360,38 @@ UPDATE limits SET scalar = scalar - $2, updated_at=now() WHERE key=$1;
 
 ---
 
+## How do I tell if VSA is actually removing write noise?
+
+For a step‑by‑step guide with live console screenshots and Prometheus metric names, see:
+- internal/ratelimiter/telemetry/readme.md
+  ([link](../internal/ratelimiter/telemetry/readme.md))
+
+Quick essentials:
+- Primary KPIs to watch (windowed):
+  - vsa_write_reduction_ratio — target ≥ 0.95 (with commit_threshold=50 you should see ~0.98 under steady load).
+  - vsa_rows_per_batch (histogram) — p50 near your threshold; p95 not far below it.
+  - vsa_churn_ratio — ≈1.0 for monotonic consumption; >1.5 indicates noisy/oscillatory traffic.
+- Enable metrics without Prometheus (prints to your server terminal):
+  - Flags: --churn_metrics=true --churn_log_interval=15s --churn_sample=1.0
+  - Optional: --churn_top_n=50 to list top keys; --metrics_addr=:9090 to expose /metrics.
+  - Tip (Windows/IDE consoles): set env VSA_CHURN_LIVE=0 for clean periodic lines; set NO_COLOR=1 to disable colors.
+- Core batching knobs that influence “noise removal” (fewer writes):
+  - --commit_threshold (higher → fewer writes, older persisted view)
+  - --commit_low_watermark (hysteresis; usually ~threshold/2)
+  - --commit_interval (how often the worker checks keys)
+  - --commit_max_age (forces a commit of small remainders during idle periods)
+
+Example (Windows PowerShell):
+```
+go run .\cmd\ratelimiter-api --http_addr=:8080 --rate_limit=1000 --commit_threshold=50 --churn_metrics=true --churn_log_interval=15s --churn_sample=1.0
+```
+Interpretation cheatsheet:
+- If vsa_write_reduction_ratio drops (< 0.90 sustained): your batches are too small/too frequent — raise commit_threshold, relax commit_max_age, or add key affinity so hot keys don’t split across replicas.
+- If vsa_rows_per_batch p50 is low: same as above; also check for multi‑replica traffic without affinity.
+- If vsa_churn_ratio rises (> 1.5) but write_reduction stays high: VSA is successfully coalescing noisy traffic.
+
+---
+
 ## Glossary
 - Scalar (S): persisted base value.
 - Vector (A_net): in‑memory net since last commit.
@@ -368,7 +400,6 @@ UPDATE limits SET scalar = scalar - $2, updated_at=now() WHERE key=$1;
 - Max age: freshness limit to commit during idle periods.
 - Churn: fraction of operations that cancel out within a time window.
 
----
 
 ## Useful links in this repo
 - Project overview: [../readme.md](../readme.md)
@@ -379,3 +410,6 @@ UPDATE limits SET scalar = scalar - $2, updated_at=now() WHERE key=$1;
 - Background worker/store: [../internal/ratelimiter/core](../internal/ratelimiter/core)
 
 If you have additional questions you’d like answered here, please open an issue or PR!
+
+
+---

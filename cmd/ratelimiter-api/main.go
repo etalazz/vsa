@@ -44,6 +44,7 @@ import (
 
 	"vsa/internal/ratelimiter/api"
 	"vsa/internal/ratelimiter/core"
+	"vsa/internal/ratelimiter/telemetry/churn"
 )
 
 func main() {
@@ -95,7 +96,25 @@ func main() {
 	evictionAge := flag.Duration("eviction_age", time.Hour, "Evict keys that haven’t been touched for this long")
 	evictionInterval := flag.Duration("eviction_interval", 10*time.Minute, "How often to scan for idle keys to evict")
 	httpAddr := flag.String("http_addr", ":8080", "HTTP listen address (e.g., :8080)")
+	// Telemetry flags (opt-in)
+	// Set churnEnabled to true to enable telemetry KPis, speed will be impacted.
+	churnEnabled := flag.Bool("churn_metrics", false, "Enable in-process churn telemetry (opt-in)")
+	metricsAddr := flag.String("metrics_addr", "", "If non-empty, expose Prometheus /metrics on this address (e.g., :9090)")
+	sampleRate := flag.Float64("churn_sample", 1.0, "Deterministic per-key sampling rate for churn telemetry (0..1)")
+	logInterval := flag.Duration("churn_log_interval", 15*time.Second, "If > 0, periodically log churn summary (e.g., 1m). 0 disables.")
+	topN := flag.Int("churn_top_n", 50, "Top N keys by churn to include in logs when churn_log_interval > 0")
+	keyHashLen := flag.Int("churn_key_hash_len", 8, "Number of hex chars to log for anonymized key hashes")
 	flag.Parse()
+
+	// Initialize churn telemetry (no-op if disabled)
+	churn.Enable(churn.Config{
+		Enabled:     *churnEnabled,
+		SampleRate:  *sampleRate,
+		MetricsAddr: *metricsAddr,
+		LogInterval: *logInterval,
+		TopN:        *topN,
+		KeyHashLen:  *keyHashLen,
+	})
 
 	// 2. Initialize core components.
 	persister := core.NewMockPersister()

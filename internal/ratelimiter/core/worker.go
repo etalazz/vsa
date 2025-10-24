@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 	"vsa"
+	"vsa/internal/ratelimiter/telemetry/churn"
 )
 
 // Worker manages the background tasks for the VSA store, including
@@ -162,8 +163,16 @@ func (w *Worker) runCommitCycle() {
 	err := w.persister.CommitBatch(commits)
 	if err != nil {
 		fmt.Printf("ERROR: Failed to commit batch: %v\n", err)
+		// First-class KPI: record commit error
+		churn.ObserveCommitError(1)
 		// In a real system, you would have retry logic here.
 		return
+	}
+
+	// Telemetry: record batch size and per-key vectors
+	churn.ObserveBatch(len(commits))
+	for _, c := range commits {
+		churn.ObserveCommit(c.Key, c.Vector)
 	}
 
 	// On successful persistence, update the internal state of each VSA.
@@ -193,7 +202,14 @@ func (w *Worker) runFinalFlush() {
 
 	if err := w.persister.CommitBatch(commits); err != nil {
 		fmt.Printf("ERROR: Failed to commit final batch: %v\n", err)
+		// First-class KPI: record commit error on final flush
+		churn.ObserveCommitError(1)
 		return
+	}
+	// Telemetry: record batch size and per-key vectors for final flush
+	churn.ObserveBatch(len(commits))
+	for _, c := range commits {
+		churn.ObserveCommit(c.Key, c.Vector)
 	}
 	for i := range vsaToCommit {
 		vsaToCommit[i].Commit(vectorsToCommit[i])

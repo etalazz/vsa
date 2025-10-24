@@ -7,6 +7,25 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 - TBD
 
+## [2025-10-24]
+### Added
+- In-process, opt-in churn telemetry module under `internal/ratelimiter/telemetry/churn`:
+  - Prometheus counters/histograms: `vsa_naive_writes_total`, `vsa_commits_rows_total`, `vsa_rows_per_batch`.
+  - First-class KPI Gauges: `vsa_write_reduction_ratio`, `vsa_churn_ratio`, `vsa_keys_tracked`; and commit error counter `vsa_commit_errors_total`.
+  - Windowed KPI computation (default 1m) with periodic console summaries.
+  - Live terminal dashboard (in-place updates with color) and safe periodic-line fallback; environment toggles `VSA_CHURN_LIVE` and `NO_COLOR`.
+- CLI flags in `cmd/ratelimiter-api` to control telemetry:
+  - `--churn_metrics`, `--churn_sample`, `--churn_log_interval`, `--churn_top_n`, `--churn_key_hash_len`, `--metrics_addr`.
+
+### Changed
+- Background worker wires telemetry only after successful `CommitBatch` and records errors via `vsa_commit_errors_total` on failures.
+- Console churn summary shows windowed deltas and the top key by churn; improved ANSI/live rendering with fallback for non-ANSI consoles.
+- Documentation/comments updated to clarify performance impact and how to disable/enable telemetry.
+
+### Fixed
+- Sampling edge case when `SampleRate=1.0` now deterministically includes all keys using an inclusive 64-bit threshold (avoids float rounding gaps).
+- Non-ANSI console fallback prevents log spamming; carriage-return updater used when ANSI cursor movement is unavailable.
+
 ## [2025-10-22]
 ### Added
 - Benchmark harness enhancements:

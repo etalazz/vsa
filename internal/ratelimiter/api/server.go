@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"vsa/internal/ratelimiter/core"
+	"vsa/internal/ratelimiter/telemetry/churn"
 )
 
 // Server handles the HTTP requests for the rate limiter service.
@@ -65,12 +66,17 @@ func (s *Server) handleCheckRateLimit(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Atomically check-and-consume 1 unit to avoid oversubscription under concurrency.
 	if !userVSA.TryConsume(1) {
+		// Telemetry: record rejection
+		churn.ObserveRequest(key, false)
 		w.Header().Set("X-RateLimit-Status", "Exceeded")
 		// Adding a Retry-After header is a good practice for rate limiting.
 		w.Header().Set("Retry-After", "60") // Retry after 60 seconds
 		http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 		return
 	}
+
+	// Telemetry: record admitted request
+	churn.ObserveRequest(key, true)
 
 	// 4. Success: compute remaining after consumption for accurate headers.
 	remaining := userVSA.Available()
