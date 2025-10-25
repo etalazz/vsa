@@ -26,6 +26,7 @@ import "testing"
 //   - RefundWhileVectorNegativeDoesNothing: When the net vector is already negative (e.g., durable refund applied), TryRefund is a no-op and returns false.
 //   - RefundAfterPartialCommitClampsAndPreservesScalar: After a partial Commit, TryRefund only refunds the remaining net vector and does not change the scalar (durability happens on next commit).
 //   - NonPositiveRefundRejected: n <= 0 is rejected, leaving state unchanged.
+//
 // Expectations: All assertions check (scalar, vector, Available) to ensure the VSA invariants hold after each operation.
 func TestVSA_TryRefund_Scenarios(t *testing.T) {
 	// Helper to assert state

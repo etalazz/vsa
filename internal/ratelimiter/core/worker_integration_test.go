@@ -142,6 +142,7 @@ func TestWorker_RunCommitCycle_Integration(t *testing.T) {
 //   - A 'stale' key has vector=4 and lastAccessed far in the past; a 'fresh' key was recently touched.
 //   - Eviction should: (1) persist a final commit for 'stale' with vector=4, then (2) remove it from the store.
 //   - 'fresh' must remain.
+//
 // Expectation: a commit for stale=4 exists in the persister; 'stale' no longer in store; 'fresh' still present.
 func TestWorker_RunEvictionCycle_Integration(t *testing.T) {
 	store := NewStore(100)
@@ -223,6 +224,7 @@ func TestVSAAvailableThroughWorkerFlow(t *testing.T) {
 //   - threshold=3, commit_interval=10ms.
 //   - Prepare key 'tick-key' with vector=3.
 //   - Start worker, wait a few ticks; expect a batch persisted and the key folded.
+//
 // Expectation: at least one batch recorded; for 'tick-key' scalar decreases by 3 and vector resets to 0.
 func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
 	store := NewStore(100)
@@ -254,6 +256,7 @@ func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
 //   - commit_interval is very long so the periodic ticker never fires during the test.
 //   - Prepare a key with vector=11 and threshold=10 so there is something to flush.
 //   - Call Stop(); the worker should run a final flush and persist the exact remainder.
+//
 // Expectation:
 //   - Persister receives a commit for that key with Vector=11.
 //   - VSA state is folded: scalar decreases by 11 and vector resets to 0.

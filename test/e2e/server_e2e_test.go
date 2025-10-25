@@ -65,7 +65,7 @@ func buildAndStartServer(t *testing.T, extraArgs ...string) *runningServer {
 
 	args := []string{
 		"--http_addr=:" + port,
-		"--rate_limit=1000000",       // very high so we don't hit 429s unless a test wants it
+		"--rate_limit=1000000", // very high so we don't hit 429s unless a test wants it
 		"--commit_threshold=50",
 		"--commit_interval=10ms",
 		"--commit_max_age=0",
@@ -77,9 +77,13 @@ func buildAndStartServer(t *testing.T, extraArgs ...string) *runningServer {
 	cmd.Env = append(os.Environ(), "VSA_CHURN_LIVE=0")
 
 	stdout, err := cmd.StdoutPipe()
-	if err != nil { t.Fatalf("StdoutPipe: %v", err) }
+	if err != nil {
+		t.Fatalf("StdoutPipe: %v", err)
+	}
 	stderr, err := cmd.StderrPipe()
-	if err != nil { t.Fatalf("StderrPipe: %v", err) }
+	if err != nil {
+		t.Fatalf("StderrPipe: %v", err)
+	}
 
 	logC := make(chan string, 1024)
 	go scanLines(stdout, logC)
@@ -93,14 +97,16 @@ func buildAndStartServer(t *testing.T, extraArgs ...string) *runningServer {
 	_ = waitForReady(t, logC, "listening on ")
 	// Always poll HTTP to ensure the listener is actually accepting connections.
 	base := fmt.Sprintf("http://127.0.0.1:%s", port)
-	client := &http.Client{ Timeout: 500 * time.Millisecond }
+	client := &http.Client{Timeout: 500 * time.Millisecond}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ok := false
 	for ctx.Err() == nil {
 		resp, err := client.Get(base + "/check?api_key=health")
 		if err == nil {
-			resp.Body.Close(); ok = true; break
+			resp.Body.Close()
+			ok = true
+			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -109,9 +115,9 @@ func buildAndStartServer(t *testing.T, extraArgs ...string) *runningServer {
 		t.Fatalf("server did not become ready (HTTP check failed)")
 	}
 
-	rs := &runningServer{ cmd: cmd, baseURL: base, logLinesC: logC }
+	rs := &runningServer{cmd: cmd, baseURL: base, logLinesC: logC}
 	// Ensure cleanup
-	t.Cleanup(func(){
+	t.Cleanup(func() {
 		// Try a graceful shutdown: on Windows we just kill; background commits already happened
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
@@ -152,7 +158,9 @@ func waitForReady(t *testing.T, logC <-chan string, needle string) bool {
 // exeName returns the executable name for the current OS (adds .exe on Windows).
 // Purpose: let the E2E harness build and run the server in a portable way.
 func exeName(base string) string {
-	if runtime.GOOS == "windows" { return base + ".exe" }
+	if runtime.GOOS == "windows" {
+		return base + ".exe"
+	}
 	return base
 }
 
@@ -172,17 +180,21 @@ func TestE2E_WriteReductionMonotonic(t *testing.T) {
 		"--commit_max_age=0",
 	)
 
-	client := &http.Client{ Timeout: 2 * time.Second }
+	client := &http.Client{Timeout: 2 * time.Second}
 	const N = 500
 	okCount := 0
 	for i := 0; i < N; i++ {
 		resp, err := client.Get(rs.baseURL + "/check?api_key=alice-e2e")
-		if err != nil { t.Fatalf("request error: %v", err) }
-		if resp.StatusCode == http.StatusOK { okCount++ }
+		if err != nil {
+			t.Fatalf("request error: %v", err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			okCount++
+		}
 		_ = resp.Body.Close()
 	}
 
- // Allow a few commit cycles to happen
+	// Allow a few commit cycles to happen
 	time.Sleep(1 * time.Second)
 
 	// Kill the process to end the test (final flush may not happen; that's fine)
@@ -192,7 +204,7 @@ func TestE2E_WriteReductionMonotonic(t *testing.T) {
 	// Parse logs
 	batchRe := regexp.MustCompile(`Persisting batch of (\d+) commits`)
 	rows := 0
-	Drain:
+Drain:
 	for {
 		select {
 		case line := <-rs.logLinesC:
@@ -224,13 +236,15 @@ func TestE2E_RefundFlow(t *testing.T) {
 		"--commit_interval=50ms",
 	)
 
-	client := &http.Client{ Timeout: 2 * time.Second }
+	client := &http.Client{Timeout: 2 * time.Second}
 	key := "refund-e2e"
 
 	// 1) Consume 8
 	for i := 0; i < 8; i++ {
 		resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
-		if err != nil { t.Fatalf("consume err: %v", err) }
+		if err != nil {
+			t.Fatalf("consume err: %v", err)
+		}
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200 on consume %d, got %d", i+1, resp.StatusCode)
 		}
@@ -240,7 +254,9 @@ func TestE2E_RefundFlow(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		req, _ := http.NewRequest(http.MethodPost, rs.baseURL+"/release?api_key="+key, nil)
 		resp, err := client.Do(req)
-		if err != nil { t.Fatalf("refund err: %v", err) }
+		if err != nil {
+			t.Fatalf("refund err: %v", err)
+		}
 		if resp.StatusCode != http.StatusNoContent {
 			t.Fatalf("expected 204 on refund, got %d", resp.StatusCode)
 		}
@@ -249,7 +265,9 @@ func TestE2E_RefundFlow(t *testing.T) {
 	// 3) We should be able to admit 5 more (10 budget total)
 	for i := 0; i < 5; i++ {
 		resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
-		if err != nil { t.Fatalf("post-refund consume err: %v", err) }
+		if err != nil {
+			t.Fatalf("post-refund consume err: %v", err)
+		}
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200 on post-refund consume %d, got %d", i+1, resp.StatusCode)
 		}
@@ -257,7 +275,9 @@ func TestE2E_RefundFlow(t *testing.T) {
 	}
 	// 4) Next one should be rejected (limit reached)
 	resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
-	if err != nil { t.Fatalf("extra consume err: %v", err) }
+	if err != nil {
+		t.Fatalf("extra consume err: %v", err)
+	}
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 after exhausting budget, got %d", resp.StatusCode)
 	}
@@ -267,4 +287,9 @@ func TestE2E_RefundFlow(t *testing.T) {
 // --- helpers ---
 // max returns the larger of two integers.
 // Purpose: tiny utility used in E2E assertions to avoid extra imports.
-func max(a, b int) int { if a > b { return a }; return b }
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

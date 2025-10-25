@@ -30,11 +30,12 @@ import (
 // TestServer_CheckEndpoint_Integration validates the end-to-end behavior of the /check endpoint.
 // Purpose: ensure HTTP semantics and headers are correct for success and rejection paths.
 // Scenario:
-//   1) Missing api_key → 400 Bad Request.
-//   2) Three consecutive allowed calls for a single key with rate_limit=3 → 200 OK with
-//      X-RateLimit-Remaining decreasing (2, then 1, then 0).
-//   3) Fourth call for the same key → 429 Too Many Requests with X-RateLimit-Status=Exceeded
-//      and Retry-After header.
+//  1. Missing api_key → 400 Bad Request.
+//  2. Three consecutive allowed calls for a single key with rate_limit=3 → 200 OK with
+//     X-RateLimit-Remaining decreasing (2, then 1, then 0).
+//  3. Fourth call for the same key → 429 Too Many Requests with X-RateLimit-Status=Exceeded
+//     and Retry-After header.
+//
 // Expectation: The underlying VSA vector for the key equals the number of successful admits (3).
 func TestServer_CheckEndpoint_Integration(t *testing.T) {
 	// Create the server with a low rate limit for testing purposes.
