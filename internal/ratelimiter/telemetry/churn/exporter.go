@@ -349,18 +349,33 @@ func printableLen(s string) int {
 	}
 	b := make([]byte, 0, len(s))
 	inEsc := false
+	csi := false
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if inEsc {
-			// CSI sequences end with bytes in 0x40..0x7E
+			// For CSI sequences (ESC '[' ... <final>), ignore everything until the final byte (0x40..0x7E)
+			if !csi {
+				if c == '[' { // start of CSI
+					csi = true
+					continue
+				}
+				// Non-CSI escape: consume until a final byte, then end
+				if c >= 0x40 && c <= 0x7E {
+					inEsc = false
+					csi = false
+				}
+				continue
+			}
+			// Inside CSI: keep skipping until we reach the final byte (letters like 'm', 'K', etc.)
 			if c >= 0x40 && c <= 0x7E {
 				inEsc = false
+				csi = false
 			}
 			continue
 		}
 		if c == 0x1b { // ESC
-			// support ESC [ ... sequences
 			inEsc = true
+			csi = false
 			continue
 		}
 		b = append(b, c)
