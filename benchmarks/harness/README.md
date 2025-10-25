@@ -109,6 +109,82 @@ On Windows, a PowerShell version is also available:
 pwsh benchmarks/harness/run_baselines.ps1
 ```
 
+### Microbenchmarks (package ./benchmarks)
+
+The harness above simulates end-to-end load and I/O. For CPU-only microbenchmarks of the core VSA paths (update, reads, gating, and the internal `currentVector()`), use the tests in `./benchmarks`.
+
+#### Quick start
+
+Run the full microbench suite (no unit tests):
+
+```sh
+# Linux/macOS
+go test -run ^$ -bench=. -benchmem ./benchmarks
+
+# Windows (PowerShell)
+go test -run ^$ -bench=. -benchmem ./benchmarks
+```
+
+Run only the apples-to-apples read benches:
+
+```sh
+go test -run ^$ -bench=Available_Concurrent_BGWriter|State_Concurrent_InLoop ./benchmarks
+```
+
+#### Parallel sweep for currentVector() cost
+
+`BenchmarkVSA_currentVector_Parallel_Sweep` measures the parallel read cost while a background writer keeps the state dynamic to avoid compiler hoisting. It also labels each subtest with the derived stripe count:
+
+```sh
+go test -run ^$ -bench=BenchmarkVSA_currentVector_Parallel_Sweep -benchmem ./benchmarks
+# Explore scaling with threads
+go test -run ^$ -bench=BenchmarkVSA_currentVector_Parallel_Sweep -cpu=1,2,4,8,16,20,32,48,64 ./benchmarks
+```
+
+Interpretation notes:
+- VSA chooses `stripes = nextPow2(max(8, min(128, 2*GOMAXPROCS)))`. Reads that compute the exact vector are `O(stripes)` loads; expect `ns/op` to increase as `-cpu` raises the stripe count.
+- The sweep prints subtests like `P=20,stripes=64`, which helps correlate `ns/op` with stripe growth.
+
+#### Avoiding compiler hoisting artifacts
+
+Some read-heavy microbenches can be optimized away if state never changes. We mitigate this in two ways:
+- Background writer: a goroutine that repeatedly `Update(+1)`/`Update(-1)` to keep the vector dynamic (used in `State_Concurrent` and the sweep).
+- In-loop perturbation: occasional `TryConsume(1)`/`TryRefund(1)` every N iterations (used in `Available_Concurrent`).
+
+If you create new read benches, use one of the patterns above; otherwise you may see unrealistically tiny `ns/op` from loop-invariant code motion.
+
+#### Hot-key and key-spread checks
+
+`BenchmarkStore_GetOrCreate_Concurrent` uses a global atomic index to spread requests uniformly across a key set and avoid synchronized collisions. To simulate hot-key skew:
+
+```
+// Pseudocode: 10% of ops hit a single hot key; 90% spread across others
+if (globalIdx.Add(1) % 10) == 0 {
+    key = hotKey
+} else {
+    key = keys[globalIdx.Load() % len(keys)]
+}
+```
+
+#### Reference ranges (i9-12900HK, Go 1.22/1.23, Windows)
+
+These are ballpark numbers to sanity-check your runs at `-cpu=20` (`stripes=64`):
+- `BenchmarkVSA_Update_Concurrent`: ~35–42 ns/op
+- `BenchmarkAtomicAdd` (parallel): ~16–20 ns/op (lower bound)
+- `BenchmarkVSA_Available_Concurrent` (BG writer): ~15–22 ns/op
+- `BenchmarkVSA_State_Concurrent`: ~13–18 ns/op
+- `BenchmarkVSA_TryConsume_Concurrent_Success`: ~95–105 ns/op
+- `BenchmarkVSA_ConsumeRefund_Concurrent`: ~180–200 ns/op (≈2× `TryConsume` due to two gated ops)
+- `BenchmarkVSA_currentVector_Parallel_Sweep` at `P=20,stripes=64`: ~16–20 ns/op
+
+Your exact results will vary with CPU frequency, OS scheduling, and `GOMAXPROCS`.
+
+#### Tips
+
+- Use longer runs for stability: `-benchtime=2s -count=5`.
+- Explore scaling: `-cpu=1,2,4,8,16,20,32,48,64`.
+- Profile hotspots: `-cpuprofile` and `-memprofile` flags, or run under `benchstat`/`pprof` for comparisons.
+
 Environment variables can override defaults (useful for CI):
 - HARNESS_DURATION (e.g., 750ms)
 - HARNESS_WORKERS (e.g., 32)

@@ -64,12 +64,10 @@ func BenchmarkStore_GetOrCreate_Concurrent(b *testing.B) {
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
 		for pb.Next() {
-			// Cycle through the keys to simulate a mixed workload.
-			key := keys[i%numKeys]
+			idx := globalIdx.Add(1)
+			key := keys[idx%uint64(numKeys)]
 			store.GetOrCreate(key).Update(1)
-			i++
 		}
 	})
 }
@@ -135,3 +133,174 @@ actually solve the problem of reducing database I/O.
 ---
 
 */
+
+
+// ---- Extended Benchmarks for vsa.go ----
+
+// sink variables to prevent compiler from optimizing away results in read-heavy benchmarks
+var (
+		sinkInt64 int64
+		sinkBool  bool
+		globalIdx atomic.Uint64
+	)
+
+// BenchmarkVSA_Available_Concurrent measures read performance of Available() under parallel load.
+func BenchmarkVSA_Available_Concurrent(b *testing.B) {
+	// Large scalar ensures Available() stays positive regardless of incidental updates.
+	instance := vsa.New(1_000_000_000_000)
+	const every = 64
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var local int64
+		i := 0
+		for pb.Next() {
+			if (i & (every-1)) == 0 {
+				// Perturb state so loads can't be fully hoisted; keep net near zero.
+				_ = instance.TryConsume(1)
+				_ = instance.TryRefund(1)
+			}
+			a := instance.Available()
+			local += a
+			i++
+		}
+		atomic.AddInt64(&sinkInt64, local)
+	})
+}
+
+// BenchmarkVSA_State_Concurrent measures read performance of State() under parallel load.
+func BenchmarkVSA_State_Concurrent(b *testing.B) {
+	instance := vsa.New(12345)
+	stop := make(chan struct{})
+	// Background writer makes State() genuinely dynamic
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				instance.Update(1)
+				instance.Update(-1)
+			}
+		}
+	}()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var local int64
+		for pb.Next() {
+			s, v := instance.State()
+			local += (s ^ v)
+		}
+		atomic.AddInt64(&sinkInt64, local)
+	})
+	close(stop)
+}
+
+// BenchmarkVSA_TryConsume_Concurrent_Success measures the contended gating path when it succeeds.
+func BenchmarkVSA_TryConsume_Concurrent_Success(b *testing.B) {
+	// Huge scalar so consumes rarely gate-fail in a long run.
+	instance := vsa.New(1 << 50)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var okCount int64
+		for pb.Next() {
+			if instance.TryConsume(1) {
+				okCount++
+			}
+		}
+		atomic.AddInt64(&sinkInt64, okCount)
+	})
+}
+
+// BenchmarkVSA_ConsumeRefund_Concurrent alternates consume and refund to keep vector near zero.
+func BenchmarkVSA_ConsumeRefund_Concurrent(b *testing.B) {
+	instance := vsa.New(1_000_000)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var local int64
+		for pb.Next() {
+			if instance.TryConsume(1) {
+				if instance.TryRefund(1) {
+					local++
+				}
+			}
+		}
+		atomic.AddInt64(&sinkInt64, local)
+	})
+}
+
+// BenchmarkVSA_CheckCommitCommit_Concurrent mixes updates with periodic CheckCommit + Commit.
+func BenchmarkVSA_CheckCommitCommit_Concurrent(b *testing.B) {
+	instance := vsa.New(0)
+	const threshold int64 = 1024
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		iter := 0
+		for pb.Next() {
+			instance.Update(1)
+			iter++
+			if (iter & 1023) == 0 { // every 1024 iterations per worker
+				if ok, vec := instance.CheckCommit(threshold); ok {
+					instance.Commit(vec)
+					sinkBool = ok // avoid DCE on ok path (benign write)
+				}
+			}
+		}
+	})
+}
+
+
+// ---- Follow-up apples-to-apples read benchmarks ----
+
+// BenchmarkVSA_Available_Concurrent_BGWriter makes Available() use the same
+// background-writer perturbation style as BenchmarkVSA_State_Concurrent to allow
+// apples-to-apples comparison between the two read paths.
+func BenchmarkVSA_Available_Concurrent_BGWriter(b *testing.B) {
+	instance := vsa.New(1_000_000_000_000)
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				instance.Update(1)
+				instance.Update(-1)
+			}
+		}
+	}()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var local int64
+		for pb.Next() {
+			a := instance.Available()
+			local += a
+		}
+		atomic.AddInt64(&sinkInt64, local)
+	})
+	close(stop)
+}
+
+// BenchmarkVSA_State_Concurrent_InLoop makes State() use the same in-loop
+// perturbation style as BenchmarkVSA_Available_Concurrent for an apples-to-apples
+// comparison under that pattern.
+func BenchmarkVSA_State_Concurrent_InLoop(b *testing.B) {
+	instance := vsa.New(12345)
+	const every = 64
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var local int64
+		i := 0
+		for pb.Next() {
+			if (i & (every-1)) == 0 {
+				_ = instance.TryConsume(1)
+				_ = instance.TryRefund(1)
+			}
+			s, v := instance.State()
+			local += (s ^ v)
+			i++
+		}
+		atomic.AddInt64(&sinkInt64, local)
+	})
+}

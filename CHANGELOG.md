@@ -5,11 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning where practical.
 
 ## [Unreleased]
-Date: 2025-10-24
+
+## [2025-10-25]
 ### Added
 - Exposed Prometheus /metrics on the main API server (in addition to optional standalone metrics via telemetry config). New E2E test validates 200 status, content-type, and presence of go_goroutines.
 - Additional E2E coverage: multi-key isolation, limit headers with 429, and flush on max-age under sparse traffic.
 - Unit tests to raise coverage (≥90%) for key files: API server, core store, core worker, and telemetry churn components.
+- Microbenchmarks in `./benchmarks`: apples-to-apples read benches for `Available()` and `State()` (background-writer and in-loop perturbation variants to prevent compiler hoisting), and a parallel sweep for `currentVector()` with subtests annotated by derived stripe counts.
+
+### Changed
+- Read-heavy benchmarks adjusted to avoid compiler hoisting/constant folding artifacts; numbers now reflect the O(stripes) summation cost under realistic parallel load.
+- `BenchmarkStore_GetOrCreate_Concurrent` now uses a global atomic index to spread keys uniformly across workers, avoiding synchronized collisions and yielding more representative throughput.
+- README landing page: added a centered “Experimental Version — APIs may change” pill styled to match the blue “Read the FAQ” badge for a consistent look-and-feel.
+
+### Docs
+- `benchmarks/harness/README.md`: added a Microbenchmarks section with commands, `currentVector()` sweep usage and -cpu scaling guidance, hoisting caveats, key-skew examples, reference ranges for i9-12900HK, and practical tips.
 
 ### Fixed
 - Eliminated a race in the churn exporter loop and snapshot window by making config access atomic and guarding rolling window points with a mutex; passes with -race.

@@ -12,6 +12,14 @@
 <p align="center">
   <img src="img.png" alt="VSA logo" width="160" style="max-width:160px;height:auto;" />
 </p>
+
+<!-- Experimental badge inserted below: centered with color styling -->
+<p align="center">
+  <span style="display:inline-block;background:#007ec6;color:#ffffff;padding:6px 12px;border:1px solid #007ec6;border-radius:999px;font-weight:700;letter-spacing:.3px;">
+    Experimental Version — APIs may change
+  </span>
+</p>
+
 <p align="center">
   <a href="./docs/FAQ.md" title="Start here: Read the FAQ first">
     <img src="https://img.shields.io/badge/Start%20here%20%E2%86%92-Read%20the%20FAQ-blue?style=for-the-badge" alt="Start here: Read the FAQ first">
