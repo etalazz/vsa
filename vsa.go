@@ -111,6 +111,9 @@ func (v *VSA) Commit(committedVector int64) {
 // consumes them by incrementing the volatile vector. Uses a tiny critical section
 // to ensure no oversubscription under contention while keeping Update lock-free.
 func (v *VSA) TryConsume(n int64) bool {
+	if n <= 0 { // only positive consumptions are supported here
+		return false
+	}
 	v.tryMu.Lock()
 	defer v.tryMu.Unlock()
 	// Gate using current availability
@@ -121,6 +124,28 @@ func (v *VSA) TryConsume(n int64) bool {
 	// Reserve by updating a stripe
 	idx := int(v.chooser.Add(1)) & v.mask
 	v.stripes[idx].val.Add(n)
+	return true
+}
+
+// TryRefund attempts to refund (undo) up to n units from the current positive
+// in-memory vector without making the net vector go negative.
+// It returns true if any refund was applied, false if there was nothing to refund
+// (i.e., the net vector was already <= 0) or n <= 0.
+func (v *VSA) TryRefund(n int64) bool {
+	if n <= 0 {
+		return false
+	}
+	v.tryMu.Lock()
+	defer v.tryMu.Unlock()
+	net := v.currentVector()
+	if net <= 0 {
+		return false
+	}
+	if n > net {
+		n = net // clamp: never overshoot below zero net
+	}
+	idx := int(v.chooser.Add(1)) & v.mask
+	v.stripes[idx].val.Add(-n)
 	return true
 }
 

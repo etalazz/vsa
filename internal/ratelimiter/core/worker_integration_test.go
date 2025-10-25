@@ -61,6 +61,11 @@ func (r *recordingPersister) batchCount() int {
 	return len(r.batches)
 }
 
+// TestWorker_RunCommitCycle_Integration ensures that a single synchronous commit cycle:
+// - Stages commits only for keys whose |vector| >= commit_threshold.
+// - Does not commit keys below threshold.
+// - After a successful batch, applies VSA.Commit so (scalar, vector) reflect the persisted net effect.
+// Expectation: keys 'a' and 'b' commit with vectors 3 and 5; key 'c' does not. Scalars reduce accordingly; vectors reset to 0 for committed keys.
 func TestWorker_RunCommitCycle_Integration(t *testing.T) {
 	store := NewStore(100) // Initialize with 100 as available resources
 
@@ -132,6 +137,12 @@ func TestWorker_RunCommitCycle_Integration(t *testing.T) {
 	}
 }
 
+// TestWorker_RunEvictionCycle_Integration validates eviction's final-commit semantics.
+// Scenario:
+//   - A 'stale' key has vector=4 and lastAccessed far in the past; a 'fresh' key was recently touched.
+//   - Eviction should: (1) persist a final commit for 'stale' with vector=4, then (2) remove it from the store.
+//   - 'fresh' must remain.
+// Expectation: a commit for stale=4 exists in the persister; 'stale' no longer in store; 'fresh' still present.
 func TestWorker_RunEvictionCycle_Integration(t *testing.T) {
 	store := NewStore(100)
 	rp := &recordingPersister{}
@@ -191,6 +202,10 @@ func TestWorker_RunEvictionCycle_Integration(t *testing.T) {
 }
 
 // Sanity: ensure Available = scalar - |vector|
+// TestVSAAvailableThroughWorkerFlow is a sanity check on the core VSA invariant
+// in the context of the worker tests: Available == scalar - |vector| after
+// arbitrary Update() calls. It does not start the worker and simply verifies
+// that the arithmetic holds for a small sequence of updates.
 func TestVSAAvailableThroughWorkerFlow(t *testing.T) {
 	v := vsa.New(10)
 	v.Update(3)  // vector=3 => available=7
@@ -201,6 +216,14 @@ func TestVSAAvailableThroughWorkerFlow(t *testing.T) {
 }
 
 // commitLoop goroutine: ensure the ticker triggers a commit when threshold is met.
+// TestWorker_CommitLoop_TickCommitsThreshold verifies the asynchronous commitLoop
+// goroutine persists keys that meet the threshold when the ticker fires, and
+// that VSA state is folded via Commit afterwards.
+// Scenario:
+//   - threshold=3, commit_interval=10ms.
+//   - Prepare key 'tick-key' with vector=3.
+//   - Start worker, wait a few ticks; expect a batch persisted and the key folded.
+// Expectation: at least one batch recorded; for 'tick-key' scalar decreases by 3 and vector resets to 0.
 func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
 	store := NewStore(100)
 	rp := &recordingPersister{}
@@ -224,7 +247,16 @@ func TestWorker_CommitLoop_TickCommitsThreshold(t *testing.T) {
 	}
 }
 
-// Stop should trigger a final flush that commits sub-threshold remainders.
+// TestWorker_CommitLoop_StopTriggersFinalRemainderFlush verifies that calling Stop()
+// triggers a final flush that persists any non-zero vector even if it is below the
+// commit threshold (sub-threshold remainder).
+// Scenario:
+//   - commit_interval is very long so the periodic ticker never fires during the test.
+//   - Prepare a key with vector=11 and threshold=10 so there is something to flush.
+//   - Call Stop(); the worker should run a final flush and persist the exact remainder.
+// Expectation:
+//   - Persister receives a commit for that key with Vector=11.
+//   - VSA state is folded: scalar decreases by 11 and vector resets to 0.
 func TestWorker_CommitLoop_StopTriggersFinalRemainderFlush(t *testing.T) {
 	store := NewStore(100)
 	rp := &recordingPersister{}

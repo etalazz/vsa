@@ -1,0 +1,26 @@
+{
+  "scenarios": [
+    {
+      "name": "write_reduction_monotonic",
+      "description": "Single hot key with steady +1 admits; expect high write reduction at threshold=50.",
+      "rate_limit": 1000000,
+      "commit_threshold": 50,
+      "commit_interval_ms": 10,
+      "requests": 500,
+      "keys": ["alice-e2e"],
+      "refunds": []
+    },
+    {
+      "name": "refund_flow",
+      "description": "Consume then refund; subsequent admits should succeed until limit reached.",
+      "rate_limit": 10,
+      "commit_threshold": 1000000,
+      "commit_interval_ms": 50,
+      "requests": 8,
+      "keys": ["refund-e2e"],
+      "refunds": [
+        { "key": "refund-e2e", "count": 3 }
+      ]
+    }
+  ]
+}

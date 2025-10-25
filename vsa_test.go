@@ -26,6 +26,11 @@ import (
 	"testing"
 )
 
+// TestVSA_Basics validates the foundational behavior of the VSA data structure.
+// It covers:
+//   - New: creating a VSA initializes scalar to the provided value and vector to 0.
+//   - UpdateAndState: positive/negative updates accumulate into the net in-memory vector; scalar remains unchanged.
+//   - Available: Available == scalar - |vector| for positive, negative, and zero-vector cases.
 func TestVSA_Basics(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		v := New(100)
@@ -77,6 +82,12 @@ func TestVSA_Basics(t *testing.T) {
 	})
 }
 
+// TestVSA_CommitWorkflow exercises the full commit path of a single VSA:
+// Purpose: verify that when the in-memory vector reaches the threshold, the
+// value returned by CheckCommit is folded correctly by Commit (S_new = S_old - A_net)
+// and that the in-memory vector resets to 0 afterward.
+// Expectation: after committing a vector of 50 from an initial scalar of 1000,
+// State() reports (scalar=950, vector=0) and Available() returns 950.
 func TestVSA_CommitWorkflow(t *testing.T) {
 	// Testing the e-commerce/ticketing use case:
 	// Scalar = total inventory, Vector = items in carts (reserved)
@@ -123,7 +134,12 @@ func TestVSA_CommitWorkflow(t *testing.T) {
 	}
 }
 
-// TestVSA_Concurrent tests that the VSA can be safely updated by multiple goroutines.
+// TestVSA_Concurrent validates thread-safety and additive correctness under concurrency.
+// Purpose: ensure many goroutines updating the same VSA via Update(1) result in the
+// exact expected net vector without races or lost increments.
+// Scenario: 100 goroutines × 1000 updates each all call Update(1) concurrently.
+// Expectation: final vector == 100*1000; the Go race detector should remain silent
+// when running `go test -race`.
 func TestVSA_Concurrent(t *testing.T) {
 	// If this test fails, it will likely be caught by the Go race detector.
 	// Run with `go test -race ./...`

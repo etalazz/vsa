@@ -47,6 +47,7 @@ func NewServer(store *core.Store, rateLimit int64) *Server {
 // RegisterRoutes sets up the HTTP routes for the server on the given ServeMux.
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/check", s.handleCheckRateLimit)
+	mux.HandleFunc("/release", s.handleRelease)
 }
 
 // handleCheckRateLimit is the main HTTP handler for checking and updating the rate limit.
@@ -106,4 +107,18 @@ func (s *Server) ListenAndServe(addr string) error {
 
 	fmt.Printf("Rate limiter API server listening on %s\n", addr)
 	return httpServer.ListenAndServe()
+}
+
+// handleRelease provides a simple refund (undo) endpoint that attempts to refund
+// 1 unit for the given key. If there is nothing to refund, it is a no-op.
+// Semantics: returns 204 No Content on success or no-op; 400 on missing key.
+func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("api_key")
+	if key == "" {
+		http.Error(w, "API key is required", http.StatusBadRequest)
+		return
+	}
+	userVSA := s.store.GetOrCreate(key)
+	_ = userVSA.TryRefund(1)
+	w.WriteHeader(http.StatusNoContent)
 }
