@@ -36,7 +36,6 @@ type Server struct {
 	rateLimit int64
 }
 
-
 // NewServer creates and configures a new API server.
 // It requires a configured VSA store and the rate limit policy.
 func NewServer(store *core.Store, rateLimit int64) *Server {
