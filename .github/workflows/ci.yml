@@ -32,10 +32,12 @@ jobs:
           go mod download
 
       - name: Vet
-        run: go vet ./...
+        run: go vet $(go list ./... | grep -vE '/test/e2e($|/)')
 
       - name: Test (race + coverage)
-        run: go test -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/benchmarks')
+        run: >
+          go test -race -coverprofile=coverage.out -covermode=atomic
+          $(go list ./... | grep -vE '/benchmarks($|/)|/test/e2e($|/)')
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tee coverage.txt

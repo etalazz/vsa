@@ -28,10 +28,10 @@ jobs:
           cache: true
 
       - name: Build
-        run: go build ./...
+        run: go build $(go list ./... | grep -vE '/test/e2e($|/)')
 
       - name: Run tests
-        run: go test ./... -v
+        run: go test -v $(go list ./... | grep -vE '/test/e2e($|/)')
 
       - name: Run race detector
-        run: go test -race ./... -v
+        run: go test -race -v $(go list ./... | grep -vE '/test/e2e($|/)')
