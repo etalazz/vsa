@@ -41,10 +41,11 @@ var (
 	exporterMu   sync.Mutex
 	exporterStop chan struct{}
 	exporterDone chan struct{}
-	currCfg      Config
+	currCfg      atomic.Value // stores Config
 
-	// rolling window points for KPIs (exporter goroutine only)
+	// rolling window points for KPIs (protected by windowMu)
 	windowPoints []point
+	windowMu     sync.Mutex
 
 	livePrinted   atomic.Bool
 	liveMode      atomic.Bool
@@ -58,7 +59,7 @@ func startOrUpdateExporter(cfg Config) {
 	exporterMu.Lock()
 	defer exporterMu.Unlock()
 
-	currCfg = cfg
+	currCfg.Store(cfg)
 
 	// configure live mode and colors (env overrides allowed)
 	lm := os.Getenv("VSA_CHURN_LIVE")
@@ -92,7 +93,10 @@ func startOrUpdateExporter(cfg Config) {
 
 func exporterLoop(stop <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(currCfg.LogInterval)
+	cfgAny := currCfg.Load()
+	cfg, _ := cfgAny.(Config)
+	// cfg.LogInterval is guaranteed > 0 by the starter
+	ticker := time.NewTicker(cfg.LogInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -105,6 +109,9 @@ func exporterLoop(stop <-chan struct{}, done chan<- struct{}) {
 }
 
 func publishSnapshot() {
+	// Load current config snapshot safely
+	cfgAny := currCfg.Load()
+	cfg, _ := cfgAny.(Config)
 	// Snapshot aggregates and evict idle keys beyond 2x Window
 	type row struct {
 		keyHash     uint64
@@ -113,7 +120,7 @@ func publishSnapshot() {
 	}
 	rows := make([]row, 0, 1024)
 	var tracked int
-	idleTTL := currCfg.Window * 2
+	idleTTL := cfg.Window * 2
 	cutoff := time.Now().Add(-idleTTL).UnixNano()
 	agg.Range(func(k, v any) bool {
 		ka := v.(*keyAgg)
@@ -138,8 +145,8 @@ func publishSnapshot() {
 		}
 		return rows[i].churnFactor > rows[j].churnFactor
 	})
-	if len(rows) > currCfg.TopN {
-		rows = rows[:currCfg.TopN]
+	if len(rows) > cfg.TopN {
+		rows = rows[:cfg.TopN]
 	}
 
 	// Windowed KPIs using rolling points
@@ -151,9 +158,11 @@ func publishSnapshot() {
 		sumAbs:  sumAbsGlobal.Load(),
 		sumNet:  sumNetGlobal.Load(),
 	}
+	// Protect windowPoints against concurrent publisher/test calls
+	windowMu.Lock()
 	windowPoints = append(windowPoints, pt)
 	// prune old
-	winStart := now.Add(-currCfg.Window)
+	winStart := now.Add(-cfg.Window)
 	idx := 0
 	for idx < len(windowPoints) && windowPoints[idx].ts.Before(winStart) {
 		idx++
@@ -162,6 +171,8 @@ func publishSnapshot() {
 		windowPoints = windowPoints[idx:]
 	}
 	old := windowPoints[0]
+	windowMu.Unlock()
+
 	dNaive := pt.naive - old.naive
 	dCommits := pt.commits - old.commits
 	dAbs := pt.sumAbs - old.sumAbs
@@ -180,7 +191,7 @@ func publishSnapshot() {
 		cfTxt = colorCF(churnWin, cfTxt)
 	}
 	summary := fmt.Sprintf("churn summary: global_churn=%s write_reduction_est=%s naive=%d commits=%d sample=%.2f topN=%d",
-		cfTxt, wrTxt, dNaive, dCommits, currCfg.SampleRate, currCfg.TopN)
+		cfTxt, wrTxt, dNaive, dCommits, cfg.SampleRate, cfg.TopN)
 
 	var topLine string
 	if len(rows) > 0 {
@@ -190,7 +201,7 @@ func publishSnapshot() {
 			churnTxt = colorCF(first.churnFactor, churnTxt)
 		}
 		topLine = fmt.Sprintf("top key=%s churn=%s abs=%d net=%d",
-			shortHash(first.keyHash, currCfg.KeyHashLen), churnTxt, first.abs, first.net)
+			shortHash(first.keyHash, cfg.KeyHashLen), churnTxt, first.abs, first.net)
 	} else {
 		topLine = "top key: (none yet)"
 	}
