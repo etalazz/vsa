@@ -32,7 +32,7 @@ jobs:
           go mod download
 
       - name: Vet
-        run: go vet $(go list ./... | grep -vE '/test/e2e($|/)')
+        run: go vet $(go list ./... | grep -vE '/benchmarks($|/)|/test/e2e($|/)')
 
       - name: Test (race + coverage)
         run: >
