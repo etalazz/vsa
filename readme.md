@@ -18,6 +18,13 @@
   </a>
 </p>
 
+<p align="center">
+  <em>“This project distills years of hard‑earned experience and a lot of work. I’m not claiming it’s bug‑free, but I hope it’s useful.”</em><br/>
+  <strong>If it helps you, a star is truly appreciated.</strong> ⭐<br/>
+  <a href="https://github.com/etalazz/vsa/stargazers">
+    <img src="https://img.shields.io/github/stars/etalazz/vsa?style=social" alt="Star this repo" />
+  </a>
+</p>
 
 ## Vector–Scalar Accumulator (VSA)
 
