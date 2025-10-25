@@ -17,6 +17,7 @@ VSA gates on durable baseline $S$ + in-memory $\Delta$ and only flushes the coal
 * Policy mints budget $B_k(t)$; admitted count is $A_k(t)$.
 
 **Safety (no over-allow drift):**
+
 $$
 \forall t:\quad A_k(t) \le B_k(t).
 $$
@@ -33,12 +34,13 @@ Admission consults $S_k \oplus \Delta_k$ atomically.
 ## Optimization Objective
 
 Minimize durable writes/bytes $W$ subject to safety and crash consistency:
+
 $$
 \min W \quad \text{s.t.} \quad
 \begin{cases}
 A_k(t) \le B_k(t) & \forall t \\
-\text{Crash/restart recovers } S_k \text{ without double-apply} \\
-\text{Admit decisions depend only on } (S_k \oplus \Delta_k)
+\text{Crash/restart recovers } S_k \text{ without double-apply} & {} \\
+\text{Admit decisions depend only on } (S_k \oplus \Delta_k) & {}
 \end{cases}
 $$
 
@@ -54,11 +56,13 @@ Any correct scheme must encode those $I$ outcomes ⇒ **durable bytes/writes are
 ## VSA Mechanism (Update & Flush)
 
 **Hot path $O(1)$**: accumulate in memory
+
 $$
 \Delta_k \leftarrow \Delta_k \oplus x_i,\quad \text{gate on } S_k \oplus \Delta_k.
 $$
 
 **Flush (idempotent):**
+
 $$
 S_k \leftarrow S_k \oplus \Delta_k,\qquad \Delta_k \leftarrow 0.
 $$
