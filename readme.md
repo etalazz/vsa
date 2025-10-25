@@ -1,4 +1,4 @@
-[![CI](https://github.com/esteb/vsa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/esteb/vsa/actions/workflows/ci.yml)
+[![CI](https://github.com/esteb/vsa/actions/workflows/ci.yml/badge.svg)](https://github.com/esteb/vsa/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/esteb/vsa/branch/main/graph/badge.svg)](https://codecov.io/gh/esteb/vsa)
 [![Go Report Card](https://goreportcard.com/badge/github.com/esteb/vsa)](https://goreportcard.com/report/github.com/esteb/vsa)
 [![Go Reference](https://pkg.go.dev/badge/github.com/esteb/vsa.svg)](https://pkg.go.dev/github.com/esteb/vsa)
