@@ -109,7 +109,9 @@ func TestWorker_PersisterError_DoesNotApplyCommit(t *testing.T) {
 	w := NewWorker(store, p, 3, 1, time.Hour, 0, time.Hour, time.Hour)
 
 	v := store.GetOrCreate("err")
-	for i := 0; i < 3; i++ { v.Update(1) }
+	for i := 0; i < 3; i++ {
+		v.Update(1)
+	}
 	w.runCommitCycle()
 
 	// Vector should remain 3 (no VSA.Commit applied)
@@ -119,7 +121,9 @@ func TestWorker_PersisterError_DoesNotApplyCommit(t *testing.T) {
 	// armed should remain false (disarmed before persisting)
 	var armed bool
 	store.ForEach(func(key string, mv *managedVSA) {
-		if key == "err" { armed = mv.armed.Load() }
+		if key == "err" {
+			armed = mv.armed.Load()
+		}
 	})
 	if armed {
 		t.Fatalf("expected armed=false after failed persist")
@@ -142,8 +146,12 @@ func TestWorker_FinalFlush_CommitsRemainders(t *testing.T) {
 	if len(p.batches) != 1 || len(p.batches[0]) != 2 {
 		t.Fatalf("expected 1 batch with 2 commits, got %#v", p.batches)
 	}
-	if s, v := a.State(); s != 48 || v != 0 { t.Fatalf("after flush a=(48,0), got (%d,%d)", s, v) }
-	if s, v := b.State(); s != 47 || v != 0 { t.Fatalf("after flush b=(47,0), got (%d,%d)", s, v) }
+	if s, v := a.State(); s != 48 || v != 0 {
+		t.Fatalf("after flush a=(48,0), got (%d,%d)", s, v)
+	}
+	if s, v := b.State(); s != 47 || v != 0 {
+		t.Fatalf("after flush b=(47,0), got (%d,%d)", s, v)
+	}
 }
 
 // TestWorker_Eviction_ErrorKeepsKey verifies that if eviction's final commit fails,

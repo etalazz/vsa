@@ -26,9 +26,9 @@ import (
 )
 
 // TestStore_GetOrCreate_ArmedAndLastAccessedUpdated verifies:
-//  - New keys start armed=true
-//  - lastAccessed is set on create and updated on subsequent GetOrCreate calls (fast path)
-//  - Returned instance is stable for the same key
+//   - New keys start armed=true
+//   - lastAccessed is set on create and updated on subsequent GetOrCreate calls (fast path)
+//   - Returned instance is stable for the same key
 func TestStore_GetOrCreate_ArmedAndLastAccessedUpdated(t *testing.T) {
 	store := NewStore(42)
 
