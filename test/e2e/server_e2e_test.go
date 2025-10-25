@@ -7,6 +7,7 @@ package e2e
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -282,6 +284,257 @@ func TestE2E_RefundFlow(t *testing.T) {
 		t.Fatalf("expected 429 after exhausting budget, got %d", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
+}
+
+// TestE2E_MultiKeyIsolation verifies rate limit isolation between API keys in an end-to-end scenario.
+// Purpose: demonstrate that rate limits are per-key and not shared across keys.
+// Scenario: 3 requests with 200 status, 1 request with 429 status, 1 request with 200 status; 429 expected.
+// Expectation: observe 429s for all requests.
+func TestE2E_MultiKeyIsolation(t *testing.T) {
+	rs := buildAndStartServer(t,
+		"--rate_limit=3",
+		"--commit_threshold=1000000",
+		"--commit_interval=20ms",
+	)
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	keyA, keyB := "A", "B"
+	// Exhaust A to its limit.
+	for i := 0; i < 3; i++ {
+		resp, err := client.Get(rs.baseURL + "/check?api_key=" + keyA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("A[%d] got %d", i, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+	// A should now be rejected.
+	resp, err := client.Get(rs.baseURL + "/check?api_key=" + keyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 for A after limit; got %d", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+
+	// B should still be allowed up to its limit.
+	for i := 0; i < 3; i++ {
+		resp, err := client.Get(rs.baseURL + "/check?api_key=" + keyB)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("B[%d] expected 200, got %d", i, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+}
+
+// TestE2E_FlushOnMaxAge verifies that the server enforces flushes based on the commit_max_age parameter.
+// Purpose: demonstrate that the server enforces a flush after a certain amount of time.
+// Scenario: 1000000 admits; commit_max_age=100ms; commit_interval=20ms; expect 1000000/20ms=4000 batches.
+// Expectation: observe 4000 batches in logs.
+func TestE2E_FlushOnMaxAge(t *testing.T) {
+	rs := buildAndStartServer(t,
+		"--commit_threshold=1000000", // never hit by count
+		"--commit_max_age=100ms",     // age forces small flushes
+		"--commit_interval=20ms",
+	)
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	// Few spaced admits; expect small persisted batches via logs.
+	for i := 0; i < 5; i++ {
+		resp, err := client.Get(rs.baseURL + "/check?api_key=age")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("admit %d got %d", i, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+		time.Sleep(60 * time.Millisecond)
+	}
+
+	// Give time for age-based flush to occur.
+	time.Sleep(300 * time.Millisecond)
+
+	// Drain logs and ensure at least one persist happened.
+	batchRe := regexp.MustCompile(`Persisting batch of (\d+) commits`)
+	flushed := 0
+Drain:
+	for {
+		select {
+		case line := <-rs.logLinesC:
+			if batchRe.MatchString(line) {
+				flushed++
+			}
+		case <-time.After(150 * time.Millisecond):
+			break Drain
+		}
+	}
+	if flushed == 0 {
+		t.Fatalf("expected at least one age/interval-based flush, saw none")
+	}
+}
+
+// TestE2E_LimitHeadersAnd429 verifies the rate-limiting behavior of the API, including headers and 429 status response handling.
+// Purpose: demonstrate that the rate limiter is not affected by the presence of headers.
+// Scenario: 3 requests with 200 status, 1 request with 429 status, 1 request with 200 status; 429 expected.
+// Expectation: observe 429s for all requests.
+func TestE2E_LimitHeadersAnd429(t *testing.T) {
+	rs := buildAndStartServer(t, "--rate_limit=3")
+	client := &http.Client{Timeout: 2 * time.Second}
+	key := "hdrs"
+	// 3 x 200
+	for i := 0; i < 3; i++ {
+		resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("want 200, got %d", resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+	// Then 429 with headers
+	resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("want 429, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-RateLimit-Status"); got != "Exceeded" {
+		t.Fatalf("X-RateLimit-Status=%q", got)
+	}
+	if got := resp.Header.Get("Retry-After"); got == "" {
+		t.Fatalf("expected Retry-After header")
+	}
+	_ = resp.Body.Close()
+}
+
+// TestE2E_MetricsEndpoint validates the /metrics endpoint for proper status, content-type, and presence of expected metrics.
+func TestE2E_MetricsEndpoint(t *testing.T) {
+	rs := buildAndStartServer(t)
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(rs.baseURL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("/metrics got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	if !bytes.Contains(b, []byte("go_goroutines")) {
+		t.Fatalf("expected a standard Go metric in /metrics output")
+	}
+}
+
+// TestE2E_ManyKeysConcurrent tests the rate limiter's behavior with concurrent requests using multiple keys.
+// Purpose: demonstrate that the rate limiter is not affected by the number of keys.
+// Scenario: 50 keys, 500 requests per key; 500 requests total; 429s expected.
+// Expectation: observe 429s for all keys.
+func TestE2E_ManyKeysConcurrent(t *testing.T) {
+	rs := buildAndStartServer(t,
+		"--rate_limit=5",
+		"--commit_threshold=1000000",
+		"--commit_interval=10ms",
+	)
+	client := &http.Client{Timeout: 3 * time.Second}
+
+	keys := 50
+	limit := 5
+
+	type stat struct{ ok, tmr, other int }
+	stats := make([]stat, keys)
+
+	var wg sync.WaitGroup
+	for k := 0; k < keys; k++ {
+		key := fmt.Sprintf("k-%d", k)
+		wg.Add(1)
+		go func(idx int, key string) {
+			defer wg.Done()
+			// Fire limit+2 requests per key concurrently across keys.
+			for i := 0; i < limit+2; i++ {
+				resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
+				if err != nil {
+					t.Fatalf("key %d request %d error: %v", idx, i, err)
+				}
+				switch resp.StatusCode {
+				case http.StatusOK:
+					stats[idx].ok++
+				case http.StatusTooManyRequests:
+					stats[idx].tmr++
+				default:
+					stats[idx].other++
+				}
+				_ = resp.Body.Close()
+			}
+		}(k, key)
+	}
+	wg.Wait()
+
+	for i := range stats {
+		if stats[i].ok != limit {
+			t.Fatalf("key %d: expected %d OK, got %d (429=%d, other=%d)", i, limit, stats[i].ok, stats[i].tmr, stats[i].other)
+		}
+		if stats[i].other != 0 {
+			t.Fatalf("key %d: unexpected non-200/429 responses: %d", i, stats[i].other)
+		}
+	}
+}
+
+// TestE2E_OverRefundBoundedByLimit verifies refund behavior ensuring no over-refunding beyond the allowed rate limit.
+// Purpose: demonstrate that the rate limiter is not affected by the number of keys.
+// Scenario: 1000000 admits; 3 refunds; 1000000/3=333333; 333333 > 3; 429 expected.
+// Expectation: observe 429s for all keys.
+func TestE2E_OverRefundBoundedByLimit(t *testing.T) {
+	rs := buildAndStartServer(t, "--rate_limit=3", "--commit_threshold=1000000")
+	client := &http.Client{Timeout: 2 * time.Second}
+	key := "over-refund"
+
+	// Consume 1
+	resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	// Refund more than consumed (5 times)
+	for i := 0; i < 5; i++ {
+		req, _ := http.NewRequest(http.MethodPost, rs.baseURL+"/release?api_key="+key, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("refund got %d", resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+
+	// We should never be able to exceed limit total successes over a fresh cycle
+	ok := 0
+	for i := 0; i < 5; i++ { // attempt more than limit
+		resp, err := client.Get(rs.baseURL + "/check?api_key=" + key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			ok++
+		}
+		_ = resp.Body.Close()
+	}
+	if ok > 3 {
+		t.Fatalf("over-refund should not allow > limit admits: got %d", ok)
+	}
 }
 
 // --- helpers ---

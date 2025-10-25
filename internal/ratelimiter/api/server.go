@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"vsa/internal/ratelimiter/core"
 	"vsa/internal/ratelimiter/telemetry/churn"
 )
@@ -34,6 +35,7 @@ type Server struct {
 	store     *core.Store
 	rateLimit int64
 }
+
 
 // NewServer creates and configures a new API server.
 // It requires a configured VSA store and the rate limit policy.
@@ -48,6 +50,8 @@ func NewServer(store *core.Store, rateLimit int64) *Server {
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/check", s.handleCheckRateLimit)
 	mux.HandleFunc("/release", s.handleRelease)
+	// Expose Prometheus metrics on the same server for E2E and ops.
+	mux.Handle("/metrics", promhttp.Handler())
 }
 
 // handleCheckRateLimit is the main HTTP handler for checking and updating the rate limit.
