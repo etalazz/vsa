@@ -43,6 +43,8 @@ func (r *recordingPersister) CommitBatch(commits []Commit) error {
 	return nil
 }
 
+func (r *recordingPersister) PrintFinalMetrics() {}
+
 // flatten returns all commits across batches in order received.
 func (r *recordingPersister) flatten() []Commit {
 	r.mu.Lock()

@@ -170,6 +170,9 @@ func main() {
 	// of any pending VSA vectors to ensure no data is lost.
 	worker.Stop()
 
+	// Print a single end-of-process persistence summary in yellow.
+	persister.PrintFinalMetrics()
+
 	// 8. Now, gracefully shut down the HTTP server with a timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

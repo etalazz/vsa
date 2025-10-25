@@ -45,6 +45,8 @@ func (p *mockCountingPersister) CommitBatch(commits []Commit) error {
 	return nil
 }
 
+func (p *mockCountingPersister) PrintFinalMetrics() {}
+
 func (p *mockCountingPersister) getStats() (commitCalls, totalCommits int, totalVector int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

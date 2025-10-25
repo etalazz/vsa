@@ -30,6 +30,8 @@ type errPersister struct {
 	batches   [][]Commit
 }
 
+func (p *errPersister) PrintFinalMetrics() {}
+
 func (p *errPersister) CommitBatch(commits []Commit) error {
 	if p.returnErr.Load() {
 		return errors.New("forced persister error")
