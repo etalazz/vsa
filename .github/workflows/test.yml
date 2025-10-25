@@ -1,4 +1,4 @@
-name: CI
+name: Basic CI
 
 on:
   push:
