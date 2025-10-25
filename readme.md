@@ -1,9 +1,9 @@
-[![CI](https://github.com/esteb/vsa/actions/workflows/ci.yml/badge.svg)](https://github.com/esteb/vsa/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/esteb/vsa/branch/main/graph/badge.svg)](https://codecov.io/gh/esteb/vsa)
+[![CI](https://github.com/etalazz/vsa/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/etalazz/vsa/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/esteb/vsa?branch=main)](https://codecov.io/gh/esteb/vsa)
 [![Go Report Card](https://goreportcard.com/badge/github.com/esteb/vsa)](https://goreportcard.com/report/github.com/esteb/vsa)
 [![Go Reference](https://pkg.go.dev/badge/github.com/esteb/vsa.svg)](https://pkg.go.dev/github.com/esteb/vsa)
-[![License](https://img.shields.io/github/license/esteb/vsa.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/esteb/vsa?display_name=tag&sort=semver)](https://github.com/esteb/vsa/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/tag/esteb/vsa?label=release&sort=semver)](https://github.com/esteb/vsa/releases)
 
 <h1 align="center">Commit information, not traffic</h1>
 <p align="center">
