@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning where practical.
 
 ## [Unreleased]
-- TBD
+Date: 2025-10-24
+### Added
+- Exposed Prometheus /metrics on the main API server (in addition to optional standalone metrics via telemetry config). New E2E test validates 200 status, content-type, and presence of go_goroutines.
+- Additional E2E coverage: multi-key isolation, limit headers with 429, and flush on max-age under sparse traffic.
+- Unit tests to raise coverage (≥90%) for key files: API server, core store, core worker, and telemetry churn components.
+
+### Fixed
+- Eliminated a race in the churn exporter loop and snapshot window by making config access atomic and guarding rolling window points with a mutex; passes with -race.
+- Prevented CI unit steps from failing on test-only packages by excluding /benchmarks and /test/e2e from unit build/test/coverage selection.
+
+### CI
+- Consolidated to a single workflow (removed Basic CI). Main CI now:
+  - Triggers on push, pull_request, and workflow_dispatch with concurrency control.
+  - Runs vet (non-blocking), unit/integration tests with race and coverage, uploads coverage to Codecov (non-fatal), and then a dedicated E2E job with -tags=e2e.
+  - Filters packages to exclude /benchmarks and /test/e2e from unit coverage.
 
 ## [2025-10-24]
 ### Added
