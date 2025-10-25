@@ -18,8 +18,9 @@ var currentVectorSink int64
 // (stripes ≈ nextPow2(2*P) capped in New).
 //
 // How to run (examples):
-//   go test -run ^$ -bench=BenchmarkVSA_currentVector_Parallel_Sweep -benchmem ./benchmarks
-//   go test -run ^$ -bench=BenchmarkVSA_currentVector_Parallel_Sweep -cpu=1,2,4,8,16,20,32 ./benchmarks
+//
+//	go test -run ^$ -bench=BenchmarkVSA_currentVector_Parallel_Sweep -benchmem ./benchmarks
+//	go test -run ^$ -bench=BenchmarkVSA_currentVector_Parallel_Sweep -cpu=1,2,4,8,16,20,32 ./benchmarks
 func BenchmarkVSA_currentVector_Parallel_Sweep(b *testing.B) {
 	for _, p := range []int{1, 2, 4, 8, 16, 20, 32} {
 		p := p

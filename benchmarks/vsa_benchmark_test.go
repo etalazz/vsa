@@ -134,15 +134,14 @@ actually solve the problem of reducing database I/O.
 
 */
 
-
 // ---- Extended Benchmarks for vsa.go ----
 
 // sink variables to prevent compiler from optimizing away results in read-heavy benchmarks
 var (
-		sinkInt64 int64
-		sinkBool  bool
-		globalIdx atomic.Uint64
-	)
+	sinkInt64 int64
+	sinkBool  bool
+	globalIdx atomic.Uint64
+)
 
 // BenchmarkVSA_Available_Concurrent measures read performance of Available() under parallel load.
 func BenchmarkVSA_Available_Concurrent(b *testing.B) {
@@ -154,7 +153,7 @@ func BenchmarkVSA_Available_Concurrent(b *testing.B) {
 		var local int64
 		i := 0
 		for pb.Next() {
-			if (i & (every-1)) == 0 {
+			if (i & (every - 1)) == 0 {
 				// Perturb state so loads can't be fully hoisted; keep net near zero.
 				_ = instance.TryConsume(1)
 				_ = instance.TryRefund(1)
@@ -249,7 +248,6 @@ func BenchmarkVSA_CheckCommitCommit_Concurrent(b *testing.B) {
 	})
 }
 
-
 // ---- Follow-up apples-to-apples read benchmarks ----
 
 // BenchmarkVSA_Available_Concurrent_BGWriter makes Available() use the same
@@ -293,7 +291,7 @@ func BenchmarkVSA_State_Concurrent_InLoop(b *testing.B) {
 		var local int64
 		i := 0
 		for pb.Next() {
-			if (i & (every-1)) == 0 {
+			if (i & (every - 1)) == 0 {
 				_ = instance.TryConsume(1)
 				_ = instance.TryRefund(1)
 			}
