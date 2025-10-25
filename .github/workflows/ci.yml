@@ -35,7 +35,7 @@ jobs:
         run: go vet ./...
 
       - name: Test (race + coverage)
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/benchmarks')
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tee coverage.txt
