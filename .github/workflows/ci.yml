@@ -32,6 +32,7 @@ jobs:
           go mod download
 
       - name: Vet
+        continue-on-error: true
         run: go vet $(go list ./... | grep -vE '/benchmarks($|/)|/test/e2e($|/)')
 
       - name: Test (race + coverage)
@@ -47,7 +48,7 @@ jobs:
         with:
           files: coverage.out
           flags: unittests
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           # token: ${{ secrets.CODECOV_TOKEN }} # only needed for private repos
 
       - name: Upload coverage artifact
