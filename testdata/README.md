@@ -1,4 +1,4 @@
-# Testdata
+# Testdata.
 
 This directory holds fixtures and configuration snippets used by tests.
 
