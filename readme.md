@@ -11,6 +11,28 @@
   </a>
 </p>
 
+<!-- CI/coverage/reference badges: Replace OWNER/REPO with your GitHub path (e.g., esteb/vsa) -->
+<p align="center">
+  <a href="https://github.com/OWNER/REPO/actions/workflows/ci.yml" title="Build & test status">
+    <img src="https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status">
+  </a>
+  <a href="https://codecov.io/gh/OWNER/REPO" title="Test coverage (Codecov)">
+    <img src="https://codecov.io/gh/OWNER/REPO/branch/main/graph/badge.svg" alt="Coverage">
+  </a>
+  <a href="https://goreportcard.com/report/github.com/OWNER/REPO" title="Go Report Card">
+    <img src="https://goreportcard.com/badge/github.com/OWNER/REPO" alt="Go Report Card">
+  </a>
+  <a href="https://pkg.go.dev/github.com/OWNER/REPO" title="Go Reference">
+    <img src="https://pkg.go.dev/badge/github.com/OWNER/REPO.svg" alt="Go Reference">
+  </a>
+  <a href="LICENSE" title="License">
+    <img src="https://img.shields.io/github/license/OWNER/REPO.svg" alt="License">
+  </a>
+  <a href="https://github.com/OWNER/REPO/releases" title="Latest release">
+    <img src="https://img.shields.io/github/v/release/OWNER/REPO?display_name=tag&sort=semver" alt="Release">
+  </a>
+</p>
+
 ## Vector–Scalar Accumulator (VSA)
 
 A high-performance, in-memory data structure designed to track the state of volatile resources by filtering I/O overhead from self-canceling transactions.
