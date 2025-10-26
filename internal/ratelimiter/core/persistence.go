@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -109,18 +110,21 @@ func (p *mockPersister) CommitBatch(commits []Commit) error {
 // PrintFinalMetrics prints a single yellow summary once at the end of the process.
 func (p *mockPersister) PrintFinalMetrics() {
 	p.mu.Lock()
-	totalRequests := p.totalRequests
 	totalWrites := p.totalWrites
 	totalBatches := p.totalBatches
 	p.mu.Unlock()
+
+	// Use admits+refunds as the denominator for write-reduction accuracy.
+	attemptedN, admitsN, refundsN := getEventTotals()
+	events := admitsN + refundsN
 
 	yellow := "\x1b[33m"
 	reset := "\x1b[0m"
 	now := time.Now().Format(time.RFC3339)
 
 	var wrPctStr string
-	if totalRequests > 0 {
-		wr := 1.0 - float64(totalWrites)/float64(totalRequests)
+	if events > 0 {
+		wr := 1.0 - float64(totalWrites)/float64(events)
 		if wr < 0 {
 			wr = 0
 		}
@@ -132,6 +136,21 @@ func (p *mockPersister) PrintFinalMetrics() {
 		wrPctStr = "n/a"
 	}
 
-	fmt.Printf("%s[%s] Final persistence metrics: requests=%d, writes=%d (batches=%d), write-reduction=%s. Impact: fewer DB writes -> lower cost, higher throughput, better latency/SLA. Pending vectors: any sub-threshold remainders are flushed on graceful shutdown; abrupt termination may leave some in-memory until next start.%s\n",
-		yellow, now, totalRequests, totalWrites, totalBatches, wrPctStr, reset)
+	// Pretty, columnar output
+	sep := strings.Repeat("-", 60)
+	fmt.Printf("%s[%s] Final persistence metrics\n", yellow, now)
+	fmt.Println(sep)
+	fmt.Printf("%-18s %12s\n", "Metric", "Value")
+	fmt.Println(sep)
+	fmt.Printf("%-18s %12d\n", "Attempted", attemptedN)
+	fmt.Printf("%-18s %12d\n", "Admits", admitsN)
+	fmt.Printf("%-18s %12d\n", "Refunds", refundsN)
+	fmt.Printf("%-18s %12d\n", "Events (A+R)", events)
+	fmt.Printf("%-18s %12d\n", "Writes", totalWrites)
+	fmt.Printf("%-18s %12d\n", "Batches", totalBatches)
+	fmt.Printf("%-18s %12s\n", "Write reduction", wrPctStr)
+	fmt.Println(sep)
+	fmt.Println("Impact: fewer DB writes -> lower cost, higher throughput, better latency/SLA.")
+	fmt.Println("Pending vectors: any sub-threshold remainders are flushed on graceful shutdown; abrupt termination may leave some in-memory until next start.")
+	fmt.Print(reset)
 }

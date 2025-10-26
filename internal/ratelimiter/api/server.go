@@ -24,9 +24,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"vsa/internal/ratelimiter/core"
 	"vsa/internal/ratelimiter/telemetry/churn"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Server handles the HTTP requests for the rate limiter service.
@@ -69,6 +70,7 @@ func (s *Server) handleCheckRateLimit(w http.ResponseWriter, r *http.Request) {
 	userVSA := s.store.GetOrCreate(key)
 
 	// 3. Atomically check-and-consume 1 unit to avoid oversubscription under concurrency.
+	core.RecordAttempt(1)
 	if !userVSA.TryConsume(1) {
 		// Telemetry: record rejection
 		churn.ObserveRequest(key, false)
@@ -80,6 +82,7 @@ func (s *Server) handleCheckRateLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Telemetry: record admitted request
+	core.RecordAdmit(1)
 	churn.ObserveRequest(key, true)
 
 	// 4. Success: compute remaining after consumption for accurate headers.
@@ -122,6 +125,8 @@ func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userVSA := s.store.GetOrCreate(key)
-	_ = userVSA.TryRefund(1)
+	if userVSA.TryRefund(1) {
+		core.RecordRefund(1)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
