@@ -40,6 +40,8 @@ A high-performance, in-memory data structure designed to track the state of vola
 
 The VSA is an architectural pattern and data structure that provides guaranteed O(1) lookups and an O(1) memory footprint for resource counters, while minimizing expensive disk/network I/O operations in high-throughput systems.
 
+<h3 align="center">“Under a 50 % churn workload (equal + and − updates), the Vector–Scalar Accumulator (VSA) collapsed 200 000 logical operations into a single commit every ~43 ms”</h3>
+
 ### Table of Contents
 - [1. The Problem: The I/O Bottleneck in Volatile Systems](#1-the-problem-the-io-bottleneck-in-volatile-systems)
 - [2. The Core Concept: A Physics-Inspired Approach](#2-the-core-concept-a-physics-inspired-approach)
