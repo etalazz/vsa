@@ -20,12 +20,21 @@
 // hot path.
 package core
 
-import "sync/atomic"
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 var (
 	attempted atomic.Int64
 	admits    atomic.Int64
 	refunds   atomic.Int64
+
+	// thresholds holds human-readable configuration thresholds captured at runtime.
+	thresholdsMu sync.RWMutex
+	thresholds   = make(map[string]string)
 )
 
 // RecordAttempt increments the number of attempted requests (successful or not).
@@ -49,9 +58,32 @@ func RecordRefund(n int64) {
 	}
 }
 
+// Threshold setters capture important runtime thresholds/config knobs for final printing.
+func SetThreshold(name string, value string) {
+	thresholdsMu.Lock()
+	thresholds[name] = value
+	thresholdsMu.Unlock()
+}
+
+func SetThresholdInt64(name string, v int64) { SetThreshold(name, fmt.Sprintf("%d", v)) }
+func SetThresholdDuration(name string, d time.Duration) { SetThreshold(name, d.String()) }
+func SetThresholdFloat64(name string, f float64) { SetThreshold(name, fmt.Sprintf("%g", f)) }
+func SetThresholdBool(name string, b bool) { SetThreshold(name, fmt.Sprintf("%t", b)) }
+
 // getEventTotals provides a snapshot of current counters.
 func getEventTotals() (attemptedN, admitsN, refundsN int64) {
 	return attempted.Load(), admits.Load(), refunds.Load()
+}
+
+// getThresholdSnapshot returns a copy of thresholds for stable iteration/printing.
+func getThresholdSnapshot() map[string]string {
+	thresholdsMu.RLock()
+	defer thresholdsMu.RUnlock()
+	out := make(map[string]string, len(thresholds))
+	for k, v := range thresholds {
+		out[k] = v
+	}
+	return out
 }
 
 // resetEventTotals resets counters to zero. Intended for tests only.
@@ -59,4 +91,14 @@ func resetEventTotals() {
 	attempted.Store(0)
 	admits.Store(0)
 	refunds.Store(0)
+	// Do not reset thresholds here; tests may set them explicitly per case.
+}
+
+// resetThresholdsForTests clears the thresholds registry. Intended for tests only.
+func resetThresholdsForTests() {
+	thresholdsMu.Lock()
+	defer thresholdsMu.Unlock()
+	for k := range thresholds {
+		delete(thresholds, k)
+	}
 }

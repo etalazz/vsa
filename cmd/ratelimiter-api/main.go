@@ -106,6 +106,23 @@ func main() {
 	keyHashLen := flag.Int("churn_key_hash_len", 8, "Number of hex chars to log for anonymized key hashes")
 	flag.Parse()
 
+	// Capture thresholds/configuration for final metrics printing.
+	core.SetThresholdInt64("rate_limit", *rateLimit)
+	core.SetThresholdInt64("commit_threshold", *commitThreshold)
+	core.SetThresholdInt64("commit_low_watermark", *commitLowWatermark)
+	core.SetThresholdDuration("commit_interval", *commitInterval)
+	core.SetThresholdDuration("commit_max_age", *commitMaxAge)
+	core.SetThresholdDuration("eviction_age", *evictionAge)
+	core.SetThresholdDuration("eviction_interval", *evictionInterval)
+	core.SetThreshold("http_addr", *httpAddr)
+	// Telemetry knobs
+	core.SetThresholdBool("churn_metrics", *churnEnabled)
+	core.SetThreshold("metrics_addr", *metricsAddr)
+	core.SetThresholdFloat64("churn_sample", *sampleRate)
+	core.SetThresholdDuration("churn_log_interval", *logInterval)
+	core.SetThresholdInt64("churn_top_n", int64(*topN))
+	core.SetThresholdInt64("churn_key_hash_len", int64(*keyHashLen))
+
 	// Initialize churn telemetry (no-op if disabled)
 	churn.Enable(churn.Config{
 		Enabled:     *churnEnabled,

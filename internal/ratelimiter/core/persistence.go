@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -118,6 +119,14 @@ func (p *mockPersister) PrintFinalMetrics() {
 	attemptedN, admitsN, refundsN := getEventTotals()
 	events := admitsN + refundsN
 
+	// Capture configured thresholds for printing.
+	th := getThresholdSnapshot()
+	keys := make([]string, 0, len(th))
+	for k := range th {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	yellow := "\x1b[33m"
 	reset := "\x1b[0m"
 	now := time.Now().Format(time.RFC3339)
@@ -150,6 +159,19 @@ func (p *mockPersister) PrintFinalMetrics() {
 	fmt.Printf("%-18s %12d\n", "Batches", totalBatches)
 	fmt.Printf("%-18s %12s\n", "Write reduction", wrPctStr)
 	fmt.Println(sep)
+
+	// Thresholds section
+	if len(keys) > 0 {
+		fmt.Printf("Configured thresholds\n")
+		fmt.Println(sep)
+		fmt.Printf("%-30s %24s\n", "Name", "Value")
+		fmt.Println(sep)
+		for _, k := range keys {
+			fmt.Printf("%-30s %24s\n", k, th[k])
+		}
+		fmt.Println(sep)
+	}
+
 	fmt.Println("Impact: fewer DB writes -> lower cost, higher throughput, better latency/SLA.")
 	fmt.Println("Pending vectors: any sub-threshold remainders are flushed on graceful shutdown; abrupt termination may leave some in-memory until next start.")
 	fmt.Print(reset)

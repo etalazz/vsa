@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestFinalMetrics_AccurateDenominator ensures that the final metrics use
@@ -13,6 +14,7 @@ import (
 // the correct number of writes and batches accumulated by the persister.
 func TestFinalMetrics_AccurateDenominator(t *testing.T) {
 	resetEventTotals()
+	resetThresholdsForTests()
 
 	// Simulate traffic
 	RecordAttempt(120)
@@ -74,5 +76,45 @@ func TestFinalMetrics_AccurateDenominator(t *testing.T) {
 	wrStr := fmt.Sprintf("%.1f%%", wr*100)
 	if !strings.Contains(out, wrStr) {
 		t.Fatalf("output does not contain expected write-reduction %s: %s", wrStr, out)
+	}
+}
+
+// TestFinalMetrics_PrintsThresholds ensures that configured thresholds are printed in the final metrics.
+func TestFinalMetrics_PrintsThresholds(t *testing.T) {
+	resetEventTotals()
+	resetThresholdsForTests()
+	// Populate a couple of thresholds
+	SetThresholdInt64("rate_limit", 1000)
+	SetThresholdInt64("commit_threshold", 50)
+	SetThresholdDuration("commit_interval", 10*time.Millisecond)
+	SetThresholdBool("churn_metrics", true)
+
+	p := NewMockPersister().(*mockPersister)
+	_ = p.CommitBatch([]Commit{{Key: "t", Vector: 1}})
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	p.PrintFinalMetrics()
+	w.Close()
+	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	out := buf.String()
+
+	if !strings.Contains(out, "Configured thresholds") {
+		t.Fatalf("thresholds header not found in output: %s", out)
+	}
+	must := []string{
+		"rate_limit", "1000",
+		"commit_threshold", "50",
+		"commit_interval", "10ms",
+		"churn_metrics", "true",
+	}
+	for _, token := range must {
+		if !strings.Contains(out, token) {
+			t.Fatalf("expected to find %q in output: %s", token, out)
+		}
 	}
 }
