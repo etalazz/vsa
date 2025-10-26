@@ -65,10 +65,10 @@ func SetThreshold(name string, value string) {
 	thresholdsMu.Unlock()
 }
 
-func SetThresholdInt64(name string, v int64) { SetThreshold(name, fmt.Sprintf("%d", v)) }
+func SetThresholdInt64(name string, v int64)            { SetThreshold(name, fmt.Sprintf("%d", v)) }
 func SetThresholdDuration(name string, d time.Duration) { SetThreshold(name, d.String()) }
-func SetThresholdFloat64(name string, f float64) { SetThreshold(name, fmt.Sprintf("%g", f)) }
-func SetThresholdBool(name string, b bool) { SetThreshold(name, fmt.Sprintf("%t", b)) }
+func SetThresholdFloat64(name string, f float64)        { SetThreshold(name, fmt.Sprintf("%g", f)) }
+func SetThresholdBool(name string, b bool)              { SetThreshold(name, fmt.Sprintf("%t", b)) }
 
 // getEventTotals provides a snapshot of current counters.
 func getEventTotals() (attemptedN, admitsN, refundsN int64) {
