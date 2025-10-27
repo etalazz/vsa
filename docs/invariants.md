@@ -67,3 +67,8 @@ These are planned but not yet implemented in this repo. See `benchmarks/harness`
 - [x] Concurrency stress with background committing
 - [x] Overflow edges (near int64 limits)
 - [ ] Production adapters idempotency + retry semantics (pending)
+
+### Environment considerations for latency tests (2025-10-27)
+
+- Percentile repeatability (p50/p95/p99) measured via in-process HTTP on Windows showed high CoV(p95) (~33% over 10 runs) despite GOMAXPROCS=1 and warm-up. This is attributed to Windows socket/timer jitter rather than a core logic issue. To improve stability we updated the test harness to avoid sockets (in-process handler invocation) and increased warm-up and sample sizes. On Linux CI with longer warm-up and larger samples, CoV thresholds (≤5–10%) are achievable.
+- Backpressure p99 HTTP test can intermittently fail on Windows with WSAEADDRINUSE due to ephemeral port/TIME_WAIT constraints. The test now bypasses sockets by invoking the handler directly and includes tiny pacing to avoid pathological tight loops. If an external HTTP round-trip is needed, reuse a single client/transport with keep-alives and consider running on Linux agents.
