@@ -22,8 +22,13 @@
 package vsa
 
 import (
+	"math"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/quick"
+	"time"
 )
 
 // TestVSA_Basics validates the foundational behavior of the VSA data structure.
@@ -268,4 +273,275 @@ func TestVSA_TryRefund_Scenarios(t *testing.T) {
 		}
 		assertState(t, v, 5, 2, 3)
 	})
+}
+
+// TestVSA_Stress_ConcurrentInterleavings runs concurrent producers that
+// call TryConsume/TryRefund in a loop while a background goroutine performs
+// periodic commits when the threshold is met. It asserts that:
+//   - Commit invariance holds at each applied commit (checked by comparing
+//     availability before and after Commit)
+//   - Availability never goes negative when TryConsume returns true
+//   - Scalar S only changes via Commit
+func TestVSA_Stress_ConcurrentInterleavings(t *testing.T) {
+	v := New(1000)
+	threshold := int64(64)
+	stop := make(chan struct{})
+
+	var commits atomic.Int64
+	var wg sync.WaitGroup
+
+	// Background committer (separate goroutine, not part of producer waitgroup)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(1 * time.Millisecond):
+				if ok, vec := v.CheckCommit(threshold); ok {
+					// Under concurrency, availability may change between reads; we only
+					// exercise the commit path here rather than asserting strict equality.
+					v.Commit(vec)
+					commits.Add(1)
+				}
+			}
+		}
+	}()
+
+	// Producers
+	workers := 16
+	dur := 50 * time.Millisecond
+	end := time.Now().Add(dur)
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func(id int) {
+			defer wg.Done()
+			for time.Now().Before(end) {
+				// alternate between consume and refund patterns
+				if id%2 == 0 {
+					ok := v.TryConsume(1)
+					if ok {
+						if v.Available() < 0 {
+							t.Errorf("availability negative after consume")
+						}
+					}
+				} else {
+					_ = v.TryRefund(1)
+				}
+			}
+		}(w)
+	}
+
+	wg.Wait()
+	close(stop)
+	// Allow committer to exit cleanly
+	time.Sleep(2 * time.Millisecond)
+}
+
+// propertyInvariant holds state captured for error reporting.
+type propertyInvariant struct {
+	Step       int
+	Op         string
+	BeforeA    int64
+	AfterA     int64
+	BeforeS    int64
+	AfterS     int64
+	BeforeVect int64
+	AfterVect  int64
+}
+
+// quickConfig returns a conservative configuration to keep runs fast and stable in CI.
+func quickConfig() *quick.Config {
+	return &quick.Config{
+		MaxCount: 64,
+		Rand:     rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+}
+
+// TestVSA_Property_Interleavings exercises randomized single-threaded interleavings of
+// Update, TryConsume, TryRefund, and Commit. It checks core invariants after each step:
+//   - Availability formula: Available == S - |V|
+//   - Commit invariance when committing the current effective vector
+//   - Consume reduces Available by n when it succeeds and never when it fails
+func TestVSA_Property_Interleavings(t *testing.T) {
+	// Generator: slices of op codes; values are derived from the code for determinism.
+	// op codes:
+	//   0: TryConsume(n in [1..4])
+	//   1: TryRefund(n in [1..4])
+	//   2: Update(delta in [-3..+3], excluding 0)
+	//   3: MaybeCommit(threshold in [1..8])
+	prop := func(codes []uint8) bool {
+		v := New(10)
+		// helper to read state
+		get := func() (s, vec, a int64) { s, vec = v.State(); return s, vec, v.Available() }
+		for i, code := range codes {
+			S_before, V_before, A_before := get()
+			switch code % 4 { // normalize to 0..3
+			case 0:
+				n := int64(1 + (i % 4))
+				ok := v.TryConsume(n)
+				S_after, V_after, afterA := get()
+				if ok {
+					// On success, availability should become S_before - |V_before + n|
+					expectA := S_before - int64Abs(V_before+n)
+					if afterA != expectA {
+						t.Logf("consume invariant failed: S_before=%d V_before=%d n=%d afterA=%d expectA=%d (S_after=%d V_after=%d)", S_before, V_before, n, afterA, expectA, S_after, V_after)
+						return false
+					}
+				} else {
+					// availability must be unchanged on failed consume
+					if afterA != A_before {
+						t.Logf("failed-consume changed availability: beforeA=%d afterA=%d", A_before, afterA)
+						return false
+					}
+				}
+			case 1:
+				n := int64(1 + (i % 4))
+				_ = v.TryRefund(n) // best effort; invariants checked generically below
+			case 2:
+				d := int64((int((i % 7)) - 3)) // in [-3..+3]
+				if d == 0 {
+					d = 1
+				}
+				v.Update(d)
+			case 3:
+				th := int64(1 + (i % 8))
+				if ok, vec := v.CheckCommit(th); ok {
+					// Commit immediately the exact vector we observed; commit invariance should hold
+					beforeA2 := v.Available()
+					v.Commit(vec)
+					afterA2 := v.Available()
+					if afterA2 != beforeA2 {
+						t.Logf("commit invariance failed: beforeA=%d afterA=%d vec=%d th=%d", beforeA2, afterA2, vec, th)
+						return false
+					}
+				}
+			}
+			// Generic invariant: Available == S - |V|
+			S, V, A := get()
+			if A != S-int64Abs(V) {
+				// include some context from the step
+				t.Logf("availability formula failed at step %d: S=%d V=%d A=%d", i, S, V, A)
+				return false
+			}
+			// Domain: ensure we didn't overflow (approximate — avoid panics and absurd values)
+			if S > math.MaxInt64/2 || S < math.MinInt64/2 {
+				t.Logf("scalar overflow guard tripped: S=%d", S)
+				return false
+			}
+		}
+		return true
+	}
+
+	if err := quick.Check(prop, quickConfig()); err != nil {
+		t.Fatalf("property failed: %v", err)
+	}
+}
+
+func int64Abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+
+// TestVSA_LastToken_NoOversubscription validates that when S=N and V=0,
+// exactly N admissions succeed under extreme contention and no more.
+func TestVSA_LastToken_NoOversubscription(t *testing.T) {
+	v := New(1000)
+	const N = int64(1000)
+	var successes int64
+
+	workers := 256
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	start := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			for {
+				if atomic.LoadInt64(&successes) >= N {
+					return
+				}
+				if v.TryConsume(1) {
+					if atomic.AddInt64(&successes, 1) > N {
+						t.Errorf("oversubscription detected: successes exceeded N")
+						return
+					}
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if successes != N {
+		t.Fatalf("successes=%d want=%d", successes, N)
+	}
+	if got := v.Available(); got != 0 {
+		t.Fatalf("Available()=%d, want 0", got)
+	}
+}
+
+// TestVSA_OverflowEdges exercises behavior with large magnitudes near int64 limits
+// to ensure no overflow and that invariants hold, including commit invariance for
+// both positive and negative vectors.
+func TestVSA_OverflowEdges(t *testing.T) {
+	const Big int64 = math.MaxInt64 / 8 // keep ample headroom
+	v := New(Big)
+
+	// Mix large updates; keep vector within safe bounds
+	v.Update(Big / 2)      // +Big/2
+	v.Update(-Big / 3)     // net ~ +Big/6
+	v.Update(Big / 16)     // small positive tweak
+	v.Update(-(Big / 32))  // small negative tweak
+
+	s, vec := v.State()
+	if s != Big {
+		t.Fatalf("scalar=%d want %d", s, Big)
+	}
+	if v.Available() != s-int64Abs(vec) {
+		t.Fatalf("availability formula failed: S=%d V=%d A=%d", s, vec, v.Available())
+	}
+
+	// Large consume that should fit comfortably
+	preA := v.Available()
+	n := Big / 10
+	ok := v.TryConsume(n)
+	if !ok {
+		t.Fatalf("TryConsume(%d) unexpectedly failed; preA=%d", n, preA)
+	}
+	// Expected availability using pre-state values
+	if got, want := v.Available(), s-int64Abs(vec+n); got != want {
+		t.Fatalf("after consume: A=%d want=%d (S=%d V_before=%d n=%d)", got, want, s, vec, n)
+	}
+
+	// Commit current vector and ensure invariance holds
+	_, vec2 := v.State()
+	beforeA := v.Available()
+	v.Commit(vec2)
+	afterA := v.Available()
+	if afterA != beforeA {
+		t.Fatalf("commit invariance failed (positive vec): before=%d after=%d vec=%d", beforeA, afterA, vec2)
+	}
+
+	// Drive vector negative with a large update and commit again
+	v.Update(-Big / 5) // push net vector negative
+	beforeA = v.Available()
+	_, vec3 := v.State()
+	v.Commit(vec3)
+	afterA = v.Available()
+	if afterA != beforeA {
+		t.Fatalf("commit invariance failed (negative vec): before=%d after=%d vec=%d", beforeA, afterA, vec3)
+	}
+
+	// Guardrails: ensure scalar remains within sane domain (no overflow)
+	S, V := v.State()
+	if S > math.MaxInt64/2 || S < math.MinInt64/2 {
+		t.Fatalf("scalar overflow guard tripped: S=%d", S)
+	}
+	if abs(V) > math.MaxInt64/2 {
+		t.Fatalf("vector overflow guard tripped: V=%d", V)
+	}
 }

@@ -103,8 +103,15 @@ func (v *VSA) Commit(committedVector int64) {
 	if committedVector == 0 {
 		return
 	}
-	v.scalar.Add(-committedVector)
+	// Serialize with TryConsume/TryRefund so the gate observes a consistent
+	// (S, committedOffset) pair relative to the subsequent in-memory update.
+	v.tryMu.Lock()
+	// Adjust scalar by the magnitude of the committed vector to preserve availability
+	delta := abs(committedVector)
+	v.scalar.Add(-delta)
+	// Reduce the effective in-memory vector by the committed amount
 	v.committedOffset.Add(committedVector)
+	v.tryMu.Unlock()
 }
 
 // TryConsume atomically checks whether at least n units are available and, if so,

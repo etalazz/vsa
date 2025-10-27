@@ -342,3 +342,13 @@ Tip:
 
 These profiles help you see where time and memory go, independent of the algorithm.
 
+
+
+## Correctness, invariants, and tests
+
+For the formal-ish invariants of the VSA and how we validate them, see:
+- docs/invariants.md — Availability formula, commit invariance, admission fairness, bounds, and concurrency guarantees.
+- vsa_test.go — property-based randomized interleavings that check invariants step-by-step.
+- vsa_test.go — concurrent stress with a background committer to exercise commit boundaries under load.
+
+Benchmarks and baselines in this harness are reproducible (fixed seeds, documented flags, baseline scripts: run_baselines.sh / run_baselines.ps1). These complement the invariants by measuring throughput, latency, and write reduction across variants (VSA, atomic, batch, CRDT, token, leaky).

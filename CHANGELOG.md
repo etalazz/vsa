@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2025-10-26]
+### Added
+- Adversarial correctness tests to strengthen guarantees:
+  - Last-token linearizability test ensures exactly N admissions succeed when S=N under extreme contention (no oversubscription).
+  - Overflow edge tests exercise very large magnitudes near int64 limits; verify availability formula and commit invariance for positive and negative vectors without overflow.
+
+### Changed
+- Commit now serializes with the admission gate (TryConsume/TryRefund) using the existing tiny mutex to avoid transient negative availability under contention. Hot-path Update remains lock-free.
+- Commit math clarified and preserved: adjust scalar by abs(committedVector) and advance committedOffset by committedVector to maintain the invariant Available = S − |V|.
+
+### Docs
+- docs/invariants.md updated with formal-ish invariants and references to the new tests; checklist now marks overflow edges as covered.
+- benchmarks/harness/README.md links to invariants doc and explains how harness complements correctness validation.
+
+### Tests
+- Full suite passes on Windows with `go test ./... -v -count=1 -timeout=240s`; race-detector runs recommended for longer local checks.
+
 ## [2025-10-25]
 ### Added
 - Exposed Prometheus /metrics on the main API server (in addition to optional standalone metrics via telemetry config). New E2E test validates 200 status, content-type, and presence of go_goroutines.
