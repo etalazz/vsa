@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360">
+    <defs>
+        <style>
+            .title{font:700 18px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#111}
+            .subtitle{font:600 12px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#444}
+            .axis{stroke:#ccc;stroke-width:1}
+            .label{font:600 12px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#333}
+            .tick{font:11px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#666}
+            .note{font:11px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#666}
+            .bar-atomic{fill:#9e9e9e}
+            .bar-batch{fill:#ff9800}
+            .bar-vsa{fill:#007ec6}
+            .value{font:600 12px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#222}
+            .legend{font:12px system-ui,Segoe UI,Roboto,Helvetica,Arial;fill:#222}
+            .legend-box{stroke:#ddd;fill:none}
+        </style>
+    </defs>
+
+    <!-- Title & subtitle -->
+    <text x="20" y="28" class="title">VSA vs. Baselines — Ops per DB call (higher is better)</text>
+    <text x="20" y="48" class="subtitle">200k operations • 32 goroutines • 1 hot key • 50% churn • threshold=64 • commit_interval=10ms • write_delay=50µs</text>
+
+    <!-- Plot area -->
+    <rect x="20" y="60" width="720" height="250" fill="#fff" stroke="#eee"/>
+
+    <!-- Y axis (0..140) scaled to plot height 250 -->
+    <line x1="60" y1="60" x2="60" y2="310" class="axis"/>
+    <line x1="60" y1="310" x2="740" y2="310" class="axis"/>
+
+    <!-- Ticks -->
+    <!-- scale: 250 / 140 ≈ 1.7857 px per unit -->
+    <g>
+        <line x1="60" y1="310" x2="740" y2="310" stroke="#f5f5f5"/>
+        <text x="36" y="314" class="tick">0</text>
+
+        <line x1="60" y1="231" x2="740" y2="231" stroke="#f5f5f5"/>
+        <text x="28" y="235" class="tick">44</text>
+
+        <line x1="60" y1="152" x2="740" y2="152" stroke="#f5f5f5"/>
+        <text x="22" y="156" class="tick">88</text>
+
+        <line x1="60" y1="73" x2="740" y2="73" stroke="#f5f5f5"/>
+        <text x="16" y="77" class="tick">132</text>
+    </g>
+
+    <!-- Bars (Ops per DB call; derived) -->
+    <!-- Atomic: ~1   → height ~ 1.79px  -->
+    <!-- Batch(64): 64 → height ~ 114.3px -->
+    <!-- VSA(th=64): 131 → height ~ 233.0px -->
+    <g>
+        <!-- Atomic -->
+        <rect x="160" y="308.2" width="90" height="1.8" class="bar-atomic"/>
+        <text x="205" y="305" text-anchor="middle" class="value">1.0×</text>
+        <text x="205" y="330" text-anchor="middle" class="label">Atomic</text>
+
+        <!-- Batch (size 64) -->
+        <rect x="335" y="195.7" width="90" height="114.3" class="bar-batch"/>
+        <text x="380" y="190" text-anchor="middle" class="value">64×</text>
+        <text x="380" y="330" text-anchor="middle" class="label">Batch (64)</text>
+
+        <!-- VSA (threshold 64) -->
+        <rect x="510" y="77.0" width="90" height="233.0" class="bar-vsa"/>
+        <text x="555" y="72" text-anchor="middle" class="value">≈131×</text>
+        <text x="555" y="330" text-anchor="middle" class="label">VSA (th=64)</text>
+    </g>
+
+    <!-- Legend -->
+    <g>
+        <rect x="22" y="318" width="716" height="30" class="legend-box"/>
+        <rect x="30" y="325" width="12" height="12" class="bar-atomic"/>
+        <text x="48" y="335" class="legend">Atomic (persist every op)</text>
+        <rect x="230" y="325" width="12" height="12" class="bar-batch"/>
+        <text x="248" y="335" class="legend">Batch (dbCalls reduced; logical writes still N)</text>
+        <rect x="500" y="325" width="12" height="12" class="bar-vsa"/>
+        <text x="518" y="335" class="legend">VSA (net commits under churn)</text>
+    </g>
+
+    <!-- Footnote -->
+    <text x="20" y="355" class="note">Notes: Values derived from 200k-op harness run; VSA ≈1,524 commits → ~131 ops/dbCall; Batch64 ≈3,125 calls → ~64 ops/dbCall; Atomic = 200k calls → 1.0×.</text>
+</svg>

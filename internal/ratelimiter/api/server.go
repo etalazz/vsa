@@ -74,10 +74,15 @@ func (s *Server) handleCheckRateLimit(w http.ResponseWriter, r *http.Request) {
 	if !userVSA.TryConsume(1) {
 		// Telemetry: record rejection
 		churn.ObserveRequest(key, false)
+		// Provide complete headers on denial as well
+		remaining := userVSA.Available()
 		w.Header().Set("X-RateLimit-Status", "Exceeded")
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", s.rateLimit))
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 		// Adding a Retry-After header is a good practice for rate limiting.
 		w.Header().Set("Retry-After", "60") // Retry after 60 seconds
-		http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("Too Many Requests"))
 		return
 	}
 

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning where practical.
 
 ## [Unreleased]
+### Added
+- Zipf hot-key demo improvements (`scripts/zipf_hotkey_demo.sh`):
+  - FAST preset (`FAST=1`) applying suggested quick-run params: `CONC=16`, `THRESHOLD=32`, `N_REQ=8000`, `PAUSE_EVERY=0`.
+  - Optional external load generators via `LOADGEN=hey|wrk` with tunables (`HEY_Z`, `HEY_C`, `WRK_T`, `WRK_C`, `WRK_D`). Falls back to built-in generator if tool not found.
+  - Usage header with examples and guidance for Windows Git Bash, Ubuntu, and macOS.
+- Internal HTTP load generator (`tools/http-loadgen`): small Go binary that reuses HTTP connections (keep-alive) and drives concurrent traffic; used by demo scripts by default (`LOADGEN=internal`) with graceful fallback.
+- New POSIX demo scripts (end-to-end scenarios):
+  - `scripts/final_flush_demo.sh` — proves sub-threshold remainders persist on graceful shutdown (final flush).
+  - `scripts/max_age_flush_demo.sh` — demonstrates `commit_max_age` under sparse traffic (flushes below-threshold remainders after idle).
+  - `scripts/eviction_idle_keys_demo.sh` — shows eviction of idle keys and final per-key commits prior to removal.
+  - `scripts/refund_semantics_demo.sh` — validates refund clamping (best-effort, never drives net vector negative) and availability increase.
+  - `scripts/headers_contract_check.sh` — validates presence and values of rate-limit headers for 200/429 paths.
+  - `scripts/threshold_sweep.sh` — threshold sweep to visualize write‑reduction vs. threshold; supports internal loadgen and prints TSV summary.
+  - `scripts/real_scenario_demo.sh` — production-leaning end-to-end demo: hot key + churn via refunds, max-age freshness commit, eviction of idle keys, and graceful shutdown with final metrics; prints write-reduction and ops/commit summary.
+- Benchmark documentation assets:
+  - `docs/benchmark-vsa-vs-baselines.svg` — published chart comparing VSA vs baselines (Atomic/Batch) under a 200k‑op, 50% churn scenario.
+  - README: embedded the chart and added a short “Why VSA vs. caches/streams?” section with reproducibility notes.
+
+### Fixed
+- POSIX portability: removed non-POSIX `set -o pipefail` from demo scripts (`scripts/*.sh`) so they run under `/bin/sh` on Ubuntu (dash), macOS, and Windows Git Bash. No functional changes to scenarios.
+- API denial path now sets full rate-limit headers on 429 (`X-RateLimit-Status=Exceeded`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`) and writes body explicitly; avoids `http.Error` to ensure headers are preserved. Scripts that validate headers on 429 now pass consistently.
+
+### Changed
+- Demo script reliability: `scripts/batching_threshold_demo.sh` now builds and runs the compiled server binary and uses graceful shutdown (SIGINT, then SIGTERM) so final persistence metrics are printed reliably on Windows Git Bash and Unix. Requests now URL-encode `api_key` and the log parser uses fixed-string grep, making it robust to special characters in keys. Parallel generation via `CONC` is supported in both sequential and parallel paths to speed up demos.
+- Zipf hot-key demo: builds and runs compiled server binary; uses URL-encoding for `api_key`, fixed-string matching for logs, configurable pacing (`PAUSE_EVERY`, `PAUSE_SECS`), tracks workload and total script time, and defaults `CONC=8` with higher concurrency in FAST mode.
+- Both `scripts/zipf_hotkey_demo.sh` and `scripts/batching_threshold_demo.sh` now default to `LOADGEN=internal` (keep-alive), dramatically speeding up demos on Windows/WSL/Ubuntu; `hey`/`wrk` remain supported as alternatives, and the scripts fall back to built-in curl loops if needed.
+- Header parsing in demo scripts made robust (case-insensitive) so `X-RateLimit-*` headers are displayed consistently across environments: updated `scripts/refund_semantics_demo.sh` and `scripts/headers_contract_check.sh`.
 
 ## [2025-10-26]
 ### Added
