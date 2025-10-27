@@ -444,7 +444,6 @@ func int64Abs(x int64) int64 {
 	return x
 }
 
-
 // TestVSA_LastToken_NoOversubscription validates that when S=N and V=0,
 // exactly N admissions succeed under extreme contention and no more.
 func TestVSA_LastToken_NoOversubscription(t *testing.T) {
@@ -492,10 +491,10 @@ func TestVSA_OverflowEdges(t *testing.T) {
 	v := New(Big)
 
 	// Mix large updates; keep vector within safe bounds
-	v.Update(Big / 2)      // +Big/2
-	v.Update(-Big / 3)     // net ~ +Big/6
-	v.Update(Big / 16)     // small positive tweak
-	v.Update(-(Big / 32))  // small negative tweak
+	v.Update(Big / 2)     // +Big/2
+	v.Update(-Big / 3)    // net ~ +Big/6
+	v.Update(Big / 16)    // small positive tweak
+	v.Update(-(Big / 32)) // small negative tweak
 
 	s, vec := v.State()
 	if s != Big {
