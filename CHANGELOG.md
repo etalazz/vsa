@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning where practical.
 
 ## [Unreleased]
+
+## [2025-10-27]
 ### Added
 - Zipf hot-key demo improvements (`scripts/zipf_hotkey_demo.sh`):
   - FAST preset (`FAST=1`) applying suggested quick-run params: `CONC=16`, `THRESHOLD=32`, `N_REQ=8000`, `PAUSE_EVERY=0`.
