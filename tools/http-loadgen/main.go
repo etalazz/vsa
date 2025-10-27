@@ -7,8 +7,9 @@
 //   - zipf:   approximate 80/20 skew (hot/cold) without PRNG: send hot key 4/5 of the time
 //
 // Usage examples:
-//   http-loadgen -base=http://127.0.0.1:8080 -mode=single -key=alice -n=5000 -c=16
-//   http-loadgen -base=http://127.0.0.1:8080 -mode=zipf -hot_key=hot-1 -cold_keys=50 -n=8000 -c=16
+//
+//	http-loadgen -base=http://127.0.0.1:8080 -mode=single -key=alice -n=5000 -c=16
+//	http-loadgen -base=http://127.0.0.1:8080 -mode=zipf -hot_key=hot-1 -cold_keys=50 -n=8000 -c=16
 //
 // Notes:
 //   - Uses GET with one query parameter (default api_key). Keys are URL-encoded.
