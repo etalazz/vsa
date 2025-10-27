@@ -96,3 +96,41 @@ jobs:
           VSA_CHURN_LIVE: "0"
         run: |
           go test -tags=e2e ./test/e2e -v -count=1 -timeout=10m
+
+  build:
+    name: Build artifacts
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify modules
+        run: |
+          go mod tidy -v
+          go mod download
+
+      - name: Build binaries (linux/amd64)
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist/linux-amd64
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/linux-amd64/ratelimiter-api ./cmd/ratelimiter-api
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/linux-amd64/http-loadgen ./tools/http-loadgen
+
+      - name: Generate checksums
+        run: |
+          (cd dist/linux-amd64 && sha256sum * > SHA256SUMS)
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsa-binaries-linux-amd64
+          path: dist/linux-amd64
+          if-no-files-found: error
