@@ -40,12 +40,12 @@ jobs:
 
       - name: Vet
         continue-on-error: true
-        run: go vet $(go list ./... | grep -vE '/benchmarks($|/)|/test/e2e($|/)')
+        run: go vet $(go list ./... | grep -vE '/benchmarks($|/)|/test($|/)|/tools/http-loadgen($|/)|/scripts($|/)')
 
       - name: Test (race + coverage)
         run: >
           go test -race -coverprofile=coverage.out -covermode=atomic
-          $(go list ./... | grep -vE '/benchmarks($|/)|/test/e2e($|/)')
+          $(go list ./... | grep -vE '/benchmarks($|/)|/test($|/)|/tools/http-loadgen($|/)|/scripts($|/)')
 
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tee coverage.txt
