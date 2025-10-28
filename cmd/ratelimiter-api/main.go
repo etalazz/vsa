@@ -79,46 +79,46 @@ func main() {
 	//
 	// Enjoy the demo!
 
- // 1. Parse configuration flags (these double as production-ready knobs).
- // Developers: these control when we batch to storage and how we manage memory.
- // - rate_limit: per-key budget (scalar S). Example: 1000 requests allowed
- // - commit_threshold: batch size; higher = fewer DB writes, but slightly older persisted state
- // - commit_interval: how often we check to commit (background)
- // - commit_low_watermark: low watermark (hysteresis) to avoid rapid on/off commits
- // - commit_max_age: freshness bound to commit sub-threshold remainders after idle periods
- // - eviction_age: how long a key can sit idle before we drop it from memory
- // - eviction_interval: how often we scan for idle keys
- // - http_addr: where the HTTP API listens
- rateLimit := flag.Int64("rate_limit", 1000, "Per-key rate limit (scalar S) — total allowed requests")
- commitThreshold := flag.Int64("commit_threshold", 50, "High watermark for background commits; higher = fewer DB writes (but slightly older persisted state)")
- commitLowWatermark := flag.Int64("commit_low_watermark", 0, "Low watermark (hysteresis). After a commit we wait until |vector| falls below this value before re-arming another commit. Set 0 to disable.")
- commitInterval := flag.Duration("commit_interval", 100*time.Millisecond, "How often the background worker checks whether to persist")
- commitMaxAge := flag.Duration("commit_max_age", 0, "Freshness bound for idle periods. If a key hasn’t changed for this long and has a non-zero remainder, we commit even if below the high watermark. Set 0 to disable.")
- evictionAge := flag.Duration("eviction_age", time.Hour, "Evict keys that haven’t been touched for this long")
- evictionInterval := flag.Duration("eviction_interval", 10*time.Minute, "How often to scan for idle keys to evict")
- httpAddr := flag.String("http_addr", ":8080", "HTTP listen address (e.g., :8080)")
+	// 1. Parse configuration flags (these double as production-ready knobs).
+	// Developers: these control when we batch to storage and how we manage memory.
+	// - rate_limit: per-key budget (scalar S). Example: 1000 requests allowed
+	// - commit_threshold: batch size; higher = fewer DB writes, but slightly older persisted state
+	// - commit_interval: how often we check to commit (background)
+	// - commit_low_watermark: low watermark (hysteresis) to avoid rapid on/off commits
+	// - commit_max_age: freshness bound to commit sub-threshold remainders after idle periods
+	// - eviction_age: how long a key can sit idle before we drop it from memory
+	// - eviction_interval: how often we scan for idle keys
+	// - http_addr: where the HTTP API listens
+	rateLimit := flag.Int64("rate_limit", 1000, "Per-key rate limit (scalar S) — total allowed requests")
+	commitThreshold := flag.Int64("commit_threshold", 50, "High watermark for background commits; higher = fewer DB writes (but slightly older persisted state)")
+	commitLowWatermark := flag.Int64("commit_low_watermark", 0, "Low watermark (hysteresis). After a commit we wait until |vector| falls below this value before re-arming another commit. Set 0 to disable.")
+	commitInterval := flag.Duration("commit_interval", 100*time.Millisecond, "How often the background worker checks whether to persist")
+	commitMaxAge := flag.Duration("commit_max_age", 0, "Freshness bound for idle periods. If a key hasn’t changed for this long and has a non-zero remainder, we commit even if below the high watermark. Set 0 to disable.")
+	evictionAge := flag.Duration("eviction_age", time.Hour, "Evict keys that haven’t been touched for this long")
+	evictionInterval := flag.Duration("eviction_interval", 10*time.Minute, "How often to scan for idle keys to evict")
+	httpAddr := flag.String("http_addr", ":8080", "HTTP listen address (e.g., :8080)")
 
- // VSA engine tuning flags (optional)
- vsaStripes := flag.Int("vsa_stripes", 0, "Number of stripes (0=auto). Rounded to next power of two; clamped to [8,64]")
- vsaCheapUpdate := flag.Bool("vsa_cheap_update_chooser", false, "Use per-goroutine PRNG to choose stripes on Update (no atomic.Add)")
- vsaPerPUpdate := flag.Bool("vsa_per_p_update_chooser", false, "Use per-P chooser for Update (no atomics, requires runtime internals)")
- vsaUseCachedGate := flag.Bool("vsa_use_cached_gate", false, "Enable background cached-gate refresher (1 goroutine per VSA)")
- vsaCacheInterval := flag.Duration("vsa_cache_interval", 100*time.Microsecond, "Cached gate refresh interval (when enabled)")
- vsaCacheSlack := flag.Int64("vsa_cache_slack", 0, "Conservative slack subtracted from availability when using cached gate")
- vsaGroupCount := flag.Int("vsa_group_count", 0, "Grouped scan count (>1 enables grouped scan); reduces reads per TryConsume")
- vsaGroupSlack := flag.Int64("vsa_group_slack", 0, "Conservative slack for grouped scan estimate")
- vsaFastGuard := flag.Int64("vsa_fast_path_guard", 0, "Guard distance to enable lock-free fast path when far from limit")
- vsaHierGroups := flag.Int("vsa_hierarchical_groups", 0, "Hierarchical aggregation groups (>1 reduces cross-core reads)")
+	// VSA engine tuning flags (optional)
+	vsaStripes := flag.Int("vsa_stripes", 0, "Number of stripes (0=auto). Rounded to next power of two; clamped to [8,64]")
+	vsaCheapUpdate := flag.Bool("vsa_cheap_update_chooser", false, "Use per-goroutine PRNG to choose stripes on Update (no atomic.Add)")
+	vsaPerPUpdate := flag.Bool("vsa_per_p_update_chooser", false, "Use per-P chooser for Update (no atomics, requires runtime internals)")
+	vsaUseCachedGate := flag.Bool("vsa_use_cached_gate", false, "Enable background cached-gate refresher (1 goroutine per VSA)")
+	vsaCacheInterval := flag.Duration("vsa_cache_interval", 100*time.Microsecond, "Cached gate refresh interval (when enabled)")
+	vsaCacheSlack := flag.Int64("vsa_cache_slack", 0, "Conservative slack subtracted from availability when using cached gate")
+	vsaGroupCount := flag.Int("vsa_group_count", 0, "Grouped scan count (>1 enables grouped scan); reduces reads per TryConsume")
+	vsaGroupSlack := flag.Int64("vsa_group_slack", 0, "Conservative slack for grouped scan estimate")
+	vsaFastGuard := flag.Int64("vsa_fast_path_guard", 0, "Guard distance to enable lock-free fast path when far from limit")
+	vsaHierGroups := flag.Int("vsa_hierarchical_groups", 0, "Hierarchical aggregation groups (>1 reduces cross-core reads)")
 
- // Telemetry flags (opt-in)
- // Set churnEnabled to true to enable telemetry KPis, speed will be impacted.
- churnEnabled := flag.Bool("churn_metrics", false, "Enable in-process churn telemetry (opt-in)")
- metricsAddr := flag.String("metrics_addr", "", "If non-empty, expose Prometheus /metrics on this address (e.g., :9090)")
- sampleRate := flag.Float64("churn_sample", 1.0, "Deterministic per-key sampling rate for churn telemetry (0..1)")
- logInterval := flag.Duration("churn_log_interval", 15*time.Second, "If > 0, periodically log churn summary (e.g., 1m). 0 disables.")
- topN := flag.Int("churn_top_n", 50, "Top N keys by churn to include in logs when churn_log_interval > 0")
- keyHashLen := flag.Int("churn_key_hash_len", 8, "Number of hex chars to log for anonymized key hashes")
- flag.Parse()
+	// Telemetry flags (opt-in)
+	// Set churnEnabled to true to enable telemetry KPis, speed will be impacted.
+	churnEnabled := flag.Bool("churn_metrics", false, "Enable in-process churn telemetry (opt-in)")
+	metricsAddr := flag.String("metrics_addr", "", "If non-empty, expose Prometheus /metrics on this address (e.g., :9090)")
+	sampleRate := flag.Float64("churn_sample", 1.0, "Deterministic per-key sampling rate for churn telemetry (0..1)")
+	logInterval := flag.Duration("churn_log_interval", 15*time.Second, "If > 0, periodically log churn summary (e.g., 1m). 0 disables.")
+	topN := flag.Int("churn_top_n", 50, "Top N keys by churn to include in logs when churn_log_interval > 0")
+	keyHashLen := flag.Int("churn_key_hash_len", 8, "Number of hex chars to log for anonymized key hashes")
+	flag.Parse()
 
 	// Capture thresholds/configuration for final metrics printing.
 	core.SetThresholdInt64("rate_limit", *rateLimit)
@@ -151,16 +151,16 @@ func main() {
 	persister := core.NewMockPersister()
 	// Build VSA options from flags so the demo showcases performance tuning knobs.
 	opts := vsa.Options{
-		Stripes:             *vsaStripes,
-		CheapUpdateChooser:  *vsaCheapUpdate,
-		PerPUpdateChooser:   *vsaPerPUpdate,
-		UseCachedGate:       *vsaUseCachedGate,
-		CacheInterval:       *vsaCacheInterval,
-		CacheSlack:          *vsaCacheSlack,
-		GroupCount:          *vsaGroupCount,
-		GroupSlack:          *vsaGroupSlack,
-		FastPathGuard:       *vsaFastGuard,
-		HierarchicalGroups:  *vsaHierGroups,
+		Stripes:            *vsaStripes,
+		CheapUpdateChooser: *vsaCheapUpdate,
+		PerPUpdateChooser:  *vsaPerPUpdate,
+		UseCachedGate:      *vsaUseCachedGate,
+		CacheInterval:      *vsaCacheInterval,
+		CacheSlack:         *vsaCacheSlack,
+		GroupCount:         *vsaGroupCount,
+		GroupSlack:         *vsaGroupSlack,
+		FastPathGuard:      *vsaFastGuard,
+		HierarchicalGroups: *vsaHierGroups,
 	}
 	store := core.NewStoreWithOptions(*rateLimit, opts) // Initialize store with the rate limit and VSA options
 

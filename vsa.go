@@ -310,14 +310,14 @@ func (v *VSA) TryConsume(n int64) bool {
 		approx := v.approxNet.Load()
 		if s-abs(approx) >= n+v.fastPathGuard {
 			// Reserve without taking the lock; bounded risk thanks to guard.
-  	idx := int(v.chooser.Add(1)) & v.mask
-  	v.stripes[idx].val.Add(n)
-  	if v.hGroups > 0 {
-  		g := idx / v.hStride
-  		v.hGroupSum[g].Add(n)
-  	}
-  	v.approxNet.Add(n)
-  	return true
+			idx := int(v.chooser.Add(1)) & v.mask
+			v.stripes[idx].val.Add(n)
+			if v.hGroups > 0 {
+				g := idx / v.hStride
+				v.hGroupSum[g].Add(n)
+			}
+			v.approxNet.Add(n)
+			return true
 		}
 	}
 	// 2) Serialized path with optional cached/grouped gating and exact fallback.

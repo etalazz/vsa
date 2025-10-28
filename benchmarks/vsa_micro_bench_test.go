@@ -147,10 +147,10 @@ func BenchmarkManyKeys_VSA_Optimized_PerP_Hier(b *testing.B) {
 	keys := make([]*vsa.VSA, K)
 	for i := range keys {
 		keys[i] = vsa.NewWithOptions(bigBudget, vsa.Options{
-			PerPUpdateChooser: true,
-			GroupCount:        4,
-			GroupSlack:        0,
-			FastPathGuard:     32,
+			PerPUpdateChooser:  true,
+			GroupCount:         4,
+			GroupSlack:         0,
+			FastPathGuard:      32,
 			HierarchicalGroups: 4,
 		})
 	}
