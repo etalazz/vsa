@@ -44,6 +44,7 @@ The VSA is an architectural pattern and data structure that provides guaranteed 
   <img src="./docs/marketing-quote.svg" alt="Under a 50 % churn workload (equal + and − updates), the Vector–Scalar Accumulator (VSA) collapsed 200 000 logical operations into a single commit every ~43 ms — capable of processing over 4.6 million logical events per second (on a single thread)" />
 </p>
 
+
 ### Table of Contents
 - [1. The Problem: The I/O Bottleneck in Volatile Systems](#1-the-problem-the-io-bottleneck-in-volatile-systems)
 - [2. The Core Concept: A Physics-Inspired Approach](#2-the-core-concept-a-physics-inspired-approach)
@@ -240,6 +241,33 @@ When building high-throughput counters, developers are typically forced into a p
 
 
 ## 11. Benchmarks — Real-World Efficiency
+
+### Performance snapshot (2025-10-28)
+
+- Machine: Windows, 12th Gen Intel(R) Core(TM) i9-12900HK; Go 1.24
+- Command: `go test .\\benchmarks -run "^$" -bench "HotKey|ManyKeys" -benchtime=3s -cpu="1,8,16" -benchmem`
+- All variants: 0 B/op, 0 allocs/op
+
+HotKey (single contended key) — ns/op
+
+| Variant | P=1 | P=8 | P=16 |
+|---|---:|---:|---:|
+| VSA_FastPath | 16.86 | 57.26 | 55.79 |
+| VSA_After | 23.32 | 55.72 | 64.87 |
+| Atomic baseline | 7.41 | 30.87 | 49.33 |
+
+ManyKeys (Zipf across 4096 keys) — ns/op
+
+| Variant | P=1 | P=8 | P=16 |
+|---|---:|---:|---:|
+| VSA_Optimized | 64.94 | 18.94 | 17.62 |
+| VSA_After | 79.30 | 59.22 | 65.33 |
+| Atomic baseline | 33.50 | 13.27 | 15.00 |
+
+Why it matters
+- ManyKeys: optimized VSA closes in on atomic baseline at P=8–16 (−76–81% vs the original VSA).
+- HotKey: fast path improves P=1 and P=16; for mid contention the locked path often dominates.
+
 
 Under a 50 % churn workload (equal + and − updates), the Vector–Scalar Accumulator (VSA) collapsed 200 000 logical operations into a single commit every ~43 ms, achieving:
 
