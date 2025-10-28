@@ -256,7 +256,7 @@ HotKey (single contended key) — ns/op
 | VSA_After | 23.32 | 55.72 | 64.87 |
 | Atomic baseline | 7.41 | 30.87 | 49.33 |
 
-ManyKeys (Zipf across 4096 keys) — ns/op
+ManyKeys (Zipf across 4096 keys) — ns/op.
 
 | Variant | P=1 | P=8 | P=16 |
 |---|---:|---:|---:|
