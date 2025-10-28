@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,8 +34,9 @@ import (
 type modeType string
 
 const (
-	modeSingle modeType = "single"
-	modeZipf   modeType = "zipf"
+	modeSingle  modeType = "single"
+	modeZipf    modeType = "zipf"
+	modeRelease modeType = "release"
 )
 
 func main() {
@@ -109,7 +111,7 @@ func main() {
 			default:
 			}
 			var k string
-			if m == modeSingle {
+			if m == modeSingle || m == modeRelease {
 				k = *key
 			} else {
 				// 80/20-ish deterministic skew: (i+id)%hotEvery != 0 => hot key
@@ -121,10 +123,15 @@ func main() {
 				}
 			}
 			u := fullPath + "?" + url.Values{*param: {k}}.Encode()
-			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+			method := http.MethodGet
+			if m == modeRelease {
+				method = http.MethodPost
+			}
+			req, _ := http.NewRequestWithContext(ctx, method, u, nil)
 			resp, err := client.Do(req)
 			if err == nil {
 				// Drain and close body to enable connection reuse
+				_, _ = io.Copy(io.Discard, resp.Body)
 				_ = resp.Body.Close()
 			} else {
 				// Brief backoff on errors to avoid hot spinning
