@@ -6,6 +6,42 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [2025-10-28]
+### Added
+- VSA performance options (all opt-in, backward-compatible):
+  - Options: `CheapUpdateChooser`, `PerPUpdateChooser`, `UseCachedGate` (+ `CacheInterval`, `CacheSlack`), `GroupCount` (+ `GroupSlack`), `FastPathGuard`, `HierarchicalGroups`, and explicit `Stripes` override.
+  - `Close()`: idempotent method to stop the cached-gate background goroutine when `UseCachedGate` is enabled.
+- Approximation and aggregation features:
+  - Lock-free fast path under budget using `approxNet` and a guard distance.
+  - Cached-net gate refresher (background ticker) with conservative slack and exact fallbacks.
+  - Grouped-scan estimator with exact fallback to full scan near thresholds.
+  - Hierarchical per-group sums to reduce cross-core reads for `currentVector()` and the cached gate.
+- Benchmarks: new variants to exercise options:
+  - `BenchmarkHotKey_VSA_FastPath`, `BenchmarkHotKey_VSA_FastPath_PerP`
+  - `BenchmarkManyKeys_VSA_Optimized`, `BenchmarkManyKeys_VSA_Optimized_PerP_Hier`
+- API demo flags to expose all VSA tuning knobs; store propagates options to per-key VSA instances.
+
+### Changed
+- Default stripe policy: from `nextPow2(clamp(2×GOMAXPROCS,[8,128]))` to `nextPow2(clamp(GOMAXPROCS,[8,64]))` to cut per-call stripe-sum cost.
+- `TryConsume`/`TryRefund` use a round-robin index under the small mutex instead of `atomic.Add` in the gated path, reducing cache traffic.
+- Internal accounting: maintain `approxNet`; `Commit` adjusts `approxNet` to preserve invariants.
+- `currentVector()` optionally uses hierarchical group sums when enabled.
+- Worker/store lifecycle: `Store.Delete` and `Store.CloseAll` now call `VSA.Close()` to stop background goroutines; `NewStoreWithOptions` added to propagate options.
+
+### Fixed
+- Eliminated data race in ManyKeys benchmarks by creating per-worker RNG/Zipf inside `RunParallel`.
+- Removed in-benchmark `GOMAXPROCS` overrides so `-cpu` sweeps reflect reality.
+
+### Docs
+- `docs/invariants.md`: new section “Approximation options and safety” and lifecycle guarantees; explains cached gate/grouped/fast path/hierarchical invariants.
+- `docs/methods.md`: new Methods and Tuning Guide with “when to enable which option”, risk mitigations, and configuration snippets.
+- `cmd/ratelimiter-api/readme.md`: documented new flags and example invocations.
+
+### Performance
+- ManyKeys (Zipf, 4096 keys): `VSA_Optimized` ~18–23 ns/op at P=8–16 (≈3–4× faster vs prior `VSA_After`; near atomic baseline).
+- HotKey: fast path improves P=1 materially; under high contention, baseline `VSA_After` often remains preferable without cached gate. See benchmarks for details.
+- All variants remain allocation-free (0 B/op, 0 allocs/op).
+
 ## [2025-10-27]
 ### Added
 - Zipf hot-key demo improvements (`scripts/zipf_hotkey_demo.sh`):

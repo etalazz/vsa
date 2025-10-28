@@ -72,3 +72,37 @@ These are planned but not yet implemented in this repo. See `benchmarks/harness`
 
 - Percentile repeatability (p50/p95/p99) measured via in-process HTTP on Windows showed high CoV(p95) (~33% over 10 runs) despite GOMAXPROCS=1 and warm-up. This is attributed to Windows socket/timer jitter rather than a core logic issue. To improve stability we updated the test harness to avoid sockets (in-process handler invocation) and increased warm-up and sample sizes. On Linux CI with longer warm-up and larger samples, CoV thresholds (≤5–10%) are achievable.
 - Backpressure p99 HTTP test can intermittently fail on Windows with WSAEADDRINUSE due to ephemeral port/TIME_WAIT constraints. The test now bypasses sockets by invoking the handler directly and includes tiny pacing to avoid pathological tight loops. If an external HTTP round-trip is needed, reuse a single client/transport with keep-alives and consider running on Linux agents.
+
+
+---
+
+## Approximation options and safety (2025-10-28)
+
+Optional performance features are available and disabled by default. They must preserve core invariants (1)–(3). The design enforces safety via conservative margins and exact fallbacks:
+
+- Cached gate (UseCachedGate)
+  - A background refresher computes a cached net V periodically. `TryConsume` may approve based on `S − |V_cached| − CacheSlack`. When close to limits or on deny, it falls back to the exact full scan using current stripes (or hierarchical sums).
+  - Safety: `CacheSlack ≥ 0` ensures we never over‑admit due to staleness. Commit invariance (2) remains intact because `Commit` adjusts both `S` and the committed offset atomically with respect to the gate’s small mutex.
+
+- Grouped scan (GroupCount > 1)
+  - `TryConsume` reads only one stripe group per call and forms an estimate scaled to the whole set, subtracting `GroupSlack`. If the estimate would deny, it falls back to the exact check.
+  - Safety: `GroupSlack ≥ 0` and exact fallback ensure no oversubscription. Availability formula (1) always holds for observable states.
+
+- Fast path (FastPathGuard > 0)
+  - When far from the limit, `TryConsume` admits without taking the mutex using an approximate net (`approxNet`), but only if `S − |approxNet| ≥ n + FastPathGuard`.
+  - Safety: The guard distance prevents oversubscription under concurrency. Close to the limit the path disables and the exact path is used.
+
+- Hierarchical aggregation (HierarchicalGroups > 1)
+  - Maintains per‑group sums to reduce cross‑core reads when computing the net vector. Used by both currentVector() and the cached gate refresher.
+  - Safety: Purely an internal representation; no change to semantics.
+
+- Per‑P chooser / Cheap Update chooser
+  - Optimize Update’s stripe selection (no atomic.Add) using a per‑goroutine PRNG or a stable P identifier. These affect only distribution, not semantics.
+
+Guidance: Enable these features selectively per workload. See methods.md for tuning and examples.
+
+## Lifecycle guarantees / background work
+
+- When `UseCachedGate` is enabled, each VSA spawns a background ticker goroutine. Call `(*VSA).Close()` to stop it when the instance is no longer needed. `Close()` is idempotent.
+- The Store and Worker in this repo ensure cleanup by calling `VSA.Close()` on eviction and on server shutdown (`Store.CloseAll()`).
+- Invariants (1)–(3) remain valid regardless of whether the cached gate is enabled or disabled.

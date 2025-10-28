@@ -51,14 +51,21 @@ type managedVSA struct {
 type Store struct {
 	counters      sync.Map
 	initialScalar int64 // The rate limit value to initialize new VSAs with
+	vsaOptions    vsa.Options
 }
 
 // NewStore creates and initializes a new VSA store.
 // The initialScalar parameter sets the starting scalar value for new VSA instances,
 // which should be the rate limit (total allowed requests).
 func NewStore(initialScalar int64) *Store {
+	return NewStoreWithOptions(initialScalar, vsa.Options{})
+}
+
+// NewStoreWithOptions creates a store that will construct VSAs using the provided options.
+func NewStoreWithOptions(initialScalar int64, opts vsa.Options) *Store {
 	return &Store{
 		initialScalar: initialScalar,
+		vsaOptions:    opts,
 	}
 }
 
@@ -79,7 +86,8 @@ func (s *Store) GetOrCreate(key string) *vsa.VSA {
 
 	// Miss: lazily allocate only now.
 	now := time.Now().UnixNano()
-	newManaged := &managedVSA{instance: vsa.New(s.initialScalar), lastAccessed: now}
+	inst := vsa.NewWithOptions(s.initialScalar, s.vsaOptions)
+	newManaged := &managedVSA{instance: inst, lastAccessed: now}
 	// Newly created keys start in the "armed" state so they can commit once they reach the high watermark.
 	newManaged.armed.Store(true)
 
@@ -103,5 +111,18 @@ func (s *Store) ForEach(f func(key string, v *managedVSA)) {
 
 // Delete removes a key from the store. This is used by the eviction worker.
 func (s *Store) Delete(key string) {
-	s.counters.Delete(key)
+	if v, ok := s.counters.LoadAndDelete(key); ok {
+		managed := v.(*managedVSA)
+		// Ensure any background goroutines inside VSA are stopped.
+		managed.instance.Close()
+	}
+}
+
+// CloseAll stops background work for all VSAs in the store. Call at shutdown.
+func (s *Store) CloseAll() {
+	s.counters.Range(func(_, value interface{}) bool {
+		managed := value.(*managedVSA)
+		managed.instance.Close()
+		return true
+	})
 }

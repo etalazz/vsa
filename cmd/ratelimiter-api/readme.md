@@ -151,3 +151,39 @@ go run ./cmd/ratelimiter-api \
   -eviction_interval=10m
 ```
 
+## VSA engine tuning flags (optional)
+These flags let you experiment with the performance options described in docs/methods.md without code changes:
+
+- `-vsa_stripes int` — number of stripes (0=auto). Rounded to the next power of two; clamped to [8,64].
+- `-vsa_cheap_update_chooser` — use per-goroutine PRNG to choose stripes on Update (avoids atomic.Add).
+- `-vsa_per_p_update_chooser` — use per-P chooser for Update (no atomics; uses runtime internals; optional).
+- `-vsa_use_cached_gate` — enable background cached gate refresher (spawns one goroutine per VSA).
+- `-vsa_cache_interval duration` — refresh interval for cached gate (e.g., 50us, 100us).
+- `-vsa_cache_slack int` — conservative slack subtracted from availability when using cached gate.
+- `-vsa_group_count int` — enable grouped scans (>1) with this many groups; reduces reads per TryConsume.
+- `-vsa_group_slack int` — conservative slack for grouped estimate.
+- `-vsa_fast_path_guard int` — guard distance to enable the lock-free fast path when far from the limit.
+- `-vsa_hierarchical_groups int` — enable hierarchical aggregation (>1) to reduce cross-core reads on big/NUMA machines.
+
+Examples:
+
+Many-keys (no background goroutines):
+```sh
+go run ./cmd/ratelimiter-api \
+  -rate_limit=1000 \
+  -commit_threshold=50 \
+  -vsa_group_count=4 \
+  -vsa_cheap_update_chooser \
+  -vsa_fast_path_guard=32
+```
+
+Hot-key (single/few keys; allow cached gate; server calls Close() on shutdown):
+```sh
+go run ./cmd/ratelimiter-api \
+  -rate_limit=1000 \
+  -commit_threshold=50 \
+  -vsa_use_cached_gate \
+  -vsa_cache_interval=50us \
+  -vsa_fast_path_guard=64
+```
+
