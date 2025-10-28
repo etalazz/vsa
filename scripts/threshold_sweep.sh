@@ -10,7 +10,7 @@
 #
 # Notes:
 # - Builds and runs a compiled server binary so graceful shutdown prints final metrics reliably
-#   on Windows Git Bash, Ubuntu, and macOS.
+#   on Windows Git Bash, Ubuntu, and macOS..
 # - Uses the internal keep‑alive load generator by default for speed.
 # - URL‑encodes api_key; counts only rows for the configured KEY to avoid warmup noise.
 # - Prints both a human summary and a compact TSV per threshold.
