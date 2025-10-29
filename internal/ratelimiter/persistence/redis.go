@@ -17,16 +17,16 @@
 package persistence
 
 import (
-    "context"
-    "errors"
-    "fmt"
-    "time"
+	"context"
+	"errors"
+	"fmt"
+	"time"
 )
 
 // RedisEvaler abstracts the minimal surface we need from a Redis client.
 // Implementations may wrap github.com/redis/go-redis/v9 (Cmdable.Eval) or any equivalent.
 type RedisEvaler interface {
-    Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error)
+	Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error)
 }
 
 // RedisPersister applies commits idempotently using a Lua script:
@@ -35,18 +35,18 @@ type RedisEvaler interface {
 // 3) EXPIRE the marker (TTL) for leak protection
 // If SETNX fails (already applied), returns OK and makes no changes.
 type RedisPersister struct {
-    client       RedisEvaler
-    markerTTL    time.Duration
+	client    RedisEvaler
+	markerTTL time.Duration
 }
 
 // NewRedisPersister returns a persister with the given client and marker TTL.
 // markerTTL guards against unbounded growth of commit markers; choose a duration
 // comfortably larger than your maximum retry window.
 func NewRedisPersister(client RedisEvaler, markerTTL time.Duration) *RedisPersister {
-    if markerTTL <= 0 {
-        markerTTL = 24 * time.Hour
-    }
-    return &RedisPersister{client: client, markerTTL: markerTTL}
+	if markerTTL <= 0 {
+		markerTTL = 24 * time.Hour
+	}
+	return &RedisPersister{client: client, markerTTL: markerTTL}
 }
 
 // redisLuaScript performs the idempotent update. It returns 1 if applied, 0 if already applied.
@@ -72,23 +72,25 @@ end
 
 // Keys layout helpers (public for interoperability with other components)
 func RedisCounterKey(key string) string { return fmt.Sprintf("counter:%s", key) }
-func RedisCommitMarkerKey(key, commitID string) string { return fmt.Sprintf("commit:%s:%s", key, commitID) }
+func RedisCommitMarkerKey(key, commitID string) string {
+	return fmt.Sprintf("commit:%s:%s", key, commitID)
+}
 
 // CommitBatch applies entries using a single EVAL to reduce RTT via scripting per entry.
 // Some clients support pipelining; callers can wrap batching externally if needed.
 func (r *RedisPersister) CommitBatch(ctx context.Context, entries []CommitEntry) error {
-    if len(entries) == 0 {
-        return nil
-    }
-    for _, e := range entries {
-        if e.CommitID == "" {
-            return errors.New("CommitEntry.CommitID must be set")
-        }
-        keys := []string{RedisCounterKey(e.Key), RedisCommitMarkerKey(e.Key, e.CommitID)}
-        args := []interface{}{e.Vector, int(r.markerTTL.Seconds())}
-        if _, err := r.client.Eval(ctx, redisLuaScript, keys, args...); err != nil {
-            return fmt.Errorf("redis eval key=%s commit=%s: %w", e.Key, e.CommitID, err)
-        }
-    }
-    return nil
+	if len(entries) == 0 {
+		return nil
+	}
+	for _, e := range entries {
+		if e.CommitID == "" {
+			return errors.New("CommitEntry.CommitID must be set")
+		}
+		keys := []string{RedisCounterKey(e.Key), RedisCommitMarkerKey(e.Key, e.CommitID)}
+		args := []interface{}{e.Vector, int(r.markerTTL.Seconds())}
+		if _, err := r.client.Eval(ctx, redisLuaScript, keys, args...); err != nil {
+			return fmt.Errorf("redis eval key=%s commit=%s: %w", e.Key, e.CommitID, err)
+		}
+	}
+	return nil
 }

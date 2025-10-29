@@ -17,11 +17,11 @@
 package persistence
 
 import (
-    "context"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "time"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
 )
 
 // KafkaProducer is a minimal abstraction over a Kafka client.
@@ -35,7 +35,7 @@ import (
 //
 // Note: We intentionally avoid importing a specific Kafka library.
 type KafkaProducer interface {
-    Produce(ctx context.Context, topic string, key []byte, value []byte, headers map[string]string) error
+	Produce(ctx context.Context, topic string, key []byte, value []byte, headers map[string]string) error
 }
 
 // KafkaPersister publishes commits as Kafka messages (WAL or primary store).
@@ -46,57 +46,57 @@ type KafkaProducer interface {
 //
 // This persister does not apply state locally; it delegates materialization to downstream consumers.
 type KafkaPersister struct {
-    producer      KafkaProducer
-    topic         string
-    defaultTimeout time.Duration
+	producer       KafkaProducer
+	topic          string
+	defaultTimeout time.Duration
 }
 
 func NewKafkaPersister(p KafkaProducer, topic string) *KafkaPersister {
-    return &KafkaPersister{producer: p, topic: topic, defaultTimeout: 10 * time.Second}
+	return &KafkaPersister{producer: p, topic: topic, defaultTimeout: 10 * time.Second}
 }
 
 // CommitMessage is the serialized payload sent to Kafka.
 // Message key: CommitID (bytes); Payload includes logical Key and Vector.
 type CommitMessage struct {
-    Key          string  `json:"key"`
-    Vector       int64   `json:"vc"`
-    CommitID     string  `json:"commit_id"`
-    FencingToken *int64  `json:"fencing_token,omitempty"`
-    TsUnixMs     int64   `json:"ts_unix_ms"`
+	Key          string `json:"key"`
+	Vector       int64  `json:"vc"`
+	CommitID     string `json:"commit_id"`
+	FencingToken *int64 `json:"fencing_token,omitempty"`
+	TsUnixMs     int64  `json:"ts_unix_ms"`
 }
 
 func (k *KafkaPersister) CommitBatch(ctx context.Context, entries []CommitEntry) error {
-    if len(entries) == 0 {
-        return nil
-    }
-    if ctx == nil {
-        ctx = context.Background()
-    }
-    if _, ok := ctx.Deadline(); !ok && k.defaultTimeout > 0 {
-        var cancel context.CancelFunc
-        ctx, cancel = context.WithTimeout(ctx, k.defaultTimeout)
-        defer cancel()
-    }
-    nowMs := time.Now().UnixMilli()
-    for _, e := range entries {
-        if e.CommitID == "" {
-            return errors.New("CommitEntry.CommitID must be set")
-        }
-        msg := CommitMessage{
-            Key:          e.Key,
-            Vector:       e.Vector,
-            CommitID:     e.CommitID,
-            FencingToken: e.FencingToken,
-            TsUnixMs:     nowMs,
-        }
-        b, err := json.Marshal(msg)
-        if err != nil {
-            return fmt.Errorf("marshal kafka message: %w", err)
-        }
-        headers := map[string]string{"content-type": "application/json"}
-        if err := k.producer.Produce(ctx, k.topic, []byte(e.CommitID), b, headers); err != nil {
-            return fmt.Errorf("kafka produce key=%s commit=%s: %w", e.Key, e.CommitID, err)
-        }
-    }
-    return nil
+	if len(entries) == 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok && k.defaultTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, k.defaultTimeout)
+		defer cancel()
+	}
+	nowMs := time.Now().UnixMilli()
+	for _, e := range entries {
+		if e.CommitID == "" {
+			return errors.New("CommitEntry.CommitID must be set")
+		}
+		msg := CommitMessage{
+			Key:          e.Key,
+			Vector:       e.Vector,
+			CommitID:     e.CommitID,
+			FencingToken: e.FencingToken,
+			TsUnixMs:     nowMs,
+		}
+		b, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("marshal kafka message: %w", err)
+		}
+		headers := map[string]string{"content-type": "application/json"}
+		if err := k.producer.Produce(ctx, k.topic, []byte(e.CommitID), b, headers); err != nil {
+			return fmt.Errorf("kafka produce key=%s commit=%s: %w", e.Key, e.CommitID, err)
+		}
+	}
+	return nil
 }

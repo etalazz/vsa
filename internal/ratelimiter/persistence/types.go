@@ -28,22 +28,22 @@ import "context"
 // Fields:
 //   - Key: logical key to update (e.g., API key, user id)
 //   - Vector: signed delta or scalar to apply; adapters follow the project convention
-//             that the durable scalar is updated as: scalar = scalar - Vector
-//             so positive Vector reduces availability and negative Vector refunds.
+//     that the durable scalar is updated as: scalar = scalar - Vector
+//     so positive Vector reduces availability and negative Vector refunds.
 //   - CommitID: globally unique idempotency key for this commit. Re-using the same id
-//               for a retried commit makes the operation idempotent.
+//     for a retried commit makes the operation idempotent.
 //   - FencingToken: optional monotonic token to prevent out-of-order application when
-//                   multiple writers exist. Semantics are adapter-specific and disabled if nil.
+//     multiple writers exist. Semantics are adapter-specific and disabled if nil.
 //
 // Notes:
 //   - This type is separate from core.Commit to avoid breaking existing code paths.
 //   - Callers are responsible for generating stable CommitIDs across retries.
 //     UUIDv4/ULID or a monotonic stream id per key are typical choices.
 type CommitEntry struct {
-    Key          string
-    Vector       int64
-    CommitID     string
-    FencingToken *int64
+	Key          string
+	Vector       int64
+	CommitID     string
+	FencingToken *int64
 }
 
 // IdempotentPersister defines the minimal API supported by all adapters.
@@ -59,5 +59,5 @@ type CommitEntry struct {
 // The method should be linearizable per Key: if FencingToken is used, a lower token must
 // not overwrite a higher token's effects.
 type IdempotentPersister interface {
-    CommitBatch(ctx context.Context, entries []CommitEntry) error
+	CommitBatch(ctx context.Context, entries []CommitEntry) error
 }

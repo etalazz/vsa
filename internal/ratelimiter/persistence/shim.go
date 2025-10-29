@@ -17,11 +17,11 @@
 package persistence
 
 import (
-    "context"
-    "crypto/rand"
-    "encoding/hex"
-    "time"
-    "vsa/internal/ratelimiter/core"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"time"
+	"vsa/internal/ratelimiter/core"
 )
 
 // IdemShim adapts an IdempotentPersister to the existing core.Persister interface
@@ -30,27 +30,26 @@ import (
 // Note: In production, you should provide stable IDs across retries. This shim
 // generates fresh random IDs per call, which is sufficient for the demo wiring
 // and avoids introducing external dependencies.
-//
 type IdemShim struct {
-    impl IdempotentPersister
+	impl IdempotentPersister
 }
 
 func NewIdemShim(impl IdempotentPersister) *IdemShim { return &IdemShim{impl: impl} }
 
 // CommitBatch maps core.Commit -> CommitEntry and forwards to the idempotent persister.
 func (s *IdemShim) CommitBatch(commits []core.Commit) error {
-    if len(commits) == 0 {
-        return nil
-    }
-    entries := make([]CommitEntry, len(commits))
-    now := time.Now().UnixNano()
-    for i, c := range commits {
-        id := randomID()
-        entries[i] = CommitEntry{Key: c.Key, Vector: c.Vector, CommitID: id}
-        // note: FencingToken omitted in demo
-        _ = now // reserved in case we switch to time-based ULIDs later
-    }
-    return s.impl.CommitBatch(context.Background(), entries)
+	if len(commits) == 0 {
+		return nil
+	}
+	entries := make([]CommitEntry, len(commits))
+	now := time.Now().UnixNano()
+	for i, c := range commits {
+		id := randomID()
+		entries[i] = CommitEntry{Key: c.Key, Vector: c.Vector, CommitID: id}
+		// note: FencingToken omitted in demo
+		_ = now // reserved in case we switch to time-based ULIDs later
+	}
+	return s.impl.CommitBatch(context.Background(), entries)
 }
 
 // PrintFinalMetrics is a no-op for the shim. The worker already prints global metrics
@@ -58,9 +57,9 @@ func (s *IdemShim) CommitBatch(commits []core.Commit) error {
 func (s *IdemShim) PrintFinalMetrics() {}
 
 func randomID() string {
-    var b [16]byte
-    _, _ = rand.Read(b[:])
-    dst := make([]byte, 32)
-    hex.Encode(dst, b[:])
-    return string(dst)
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	dst := make([]byte, 32)
+	hex.Encode(dst, b[:])
+	return string(dst)
 }

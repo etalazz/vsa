@@ -17,11 +17,11 @@
 package persistence
 
 import (
-    "context"
-    "database/sql"
-    "errors"
-    "fmt"
-    "time"
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
 )
 
 // Postgres schema (reference):
@@ -54,85 +54,85 @@ import (
 // PostgresPersister applies commits idempotently using the safe pattern above.
 // It can optionally auto-create missing counter keys with scalar=0.
 type PostgresPersister struct {
-    db                 *sql.DB
-    createMissingKeys  bool
-    // Optional: per-call timeout fallback if ctx has no deadline
-    defaultTimeout     time.Duration
+	db                *sql.DB
+	createMissingKeys bool
+	// Optional: per-call timeout fallback if ctx has no deadline
+	defaultTimeout time.Duration
 }
 
 // NewPostgresPersister creates a persister.
 // If createMissingKeys is true, the persister will INSERT counters rows with scalar=0 on first sight.
 func NewPostgresPersister(db *sql.DB, createMissingKeys bool) *PostgresPersister {
-    return &PostgresPersister{db: db, createMissingKeys: createMissingKeys, defaultTimeout: 10 * time.Second}
+	return &PostgresPersister{db: db, createMissingKeys: createMissingKeys, defaultTimeout: 10 * time.Second}
 }
 
 // CommitBatch applies the provided entries within a single transaction.
 // Each entry remains idempotent: if the commit_id already exists, its effects are skipped.
 func (p *PostgresPersister) CommitBatch(ctx context.Context, entries []CommitEntry) error {
-    if len(entries) == 0 {
-        return nil
-    }
-    if ctx == nil {
-        ctx = context.Background()
-    }
-    // Provide a default timeout if caller didn't bound it.
-    if _, ok := ctx.Deadline(); !ok && p.defaultTimeout > 0 {
-        var cancel context.CancelFunc
-        ctx, cancel = context.WithTimeout(ctx, p.defaultTimeout)
-        defer cancel()
-    }
+	if len(entries) == 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// Provide a default timeout if caller didn't bound it.
+	if _, ok := ctx.Deadline(); !ok && p.defaultTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.defaultTimeout)
+		defer cancel()
+	}
 
-    tx, err := p.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-    if err != nil {
-        return err
-    }
-    // Ensure rollback on any failure.
-    defer func() {
-        _ = tx.Rollback()
-    }()
+	tx, err := p.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return err
+	}
+	// Ensure rollback on any failure.
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-    // Optionally pre-create counters for keys in this batch to avoid UPDATE=0
-    if p.createMissingKeys {
-        // Use a simple loop; in practice you might batch with VALUES lists.
-        for _, e := range entries {
-            if _, err := tx.ExecContext(ctx,
-                `INSERT INTO counters(key, scalar) VALUES ($1, 0) ON CONFLICT DO NOTHING`, e.Key); err != nil {
-                return fmt.Errorf("insert counters(%s): %w", e.Key, err)
-            }
-        }
-    }
+	// Optionally pre-create counters for keys in this batch to avoid UPDATE=0
+	if p.createMissingKeys {
+		// Use a simple loop; in practice you might batch with VALUES lists.
+		for _, e := range entries {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO counters(key, scalar) VALUES ($1, 0) ON CONFLICT DO NOTHING`, e.Key); err != nil {
+				return fmt.Errorf("insert counters(%s): %w", e.Key, err)
+			}
+		}
+	}
 
-    for _, e := range entries {
-        if e.CommitID == "" {
-            return errors.New("CommitEntry.CommitID must be set")
-        }
-        // Applied marker first (OK to no-op on duplicate)
-        if _, err := tx.ExecContext(ctx,
-            `INSERT INTO applied_commits(commit_id, key, vc) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-            e.CommitID, e.Key, e.Vector); err != nil {
-            return fmt.Errorf("insert applied_commits(%s): %w", e.CommitID, err)
-        }
-        // Optional fencing: require provided token to be >= last_token, then set it.
-        if e.FencingToken != nil {
-            // Update last_token only if we're not re-applying a known commit id.
-            if _, err := tx.ExecContext(ctx,
-                `UPDATE counters SET last_token = GREATEST(COALESCE(last_token, $3), $3)
+	for _, e := range entries {
+		if e.CommitID == "" {
+			return errors.New("CommitEntry.CommitID must be set")
+		}
+		// Applied marker first (OK to no-op on duplicate)
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO applied_commits(commit_id, key, vc) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+			e.CommitID, e.Key, e.Vector); err != nil {
+			return fmt.Errorf("insert applied_commits(%s): %w", e.CommitID, err)
+		}
+		// Optional fencing: require provided token to be >= last_token, then set it.
+		if e.FencingToken != nil {
+			// Update last_token only if we're not re-applying a known commit id.
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE counters SET last_token = GREATEST(COALESCE(last_token, $3), $3)
                   WHERE key = $1 AND NOT EXISTS (SELECT 1 FROM applied_commits WHERE commit_id = $2) AND (last_token IS NULL OR $3 >= last_token)`,
-                e.Key, e.CommitID, *e.FencingToken); err != nil {
-                return fmt.Errorf("update last_token(%s): %w", e.Key, err)
-            }
-        }
-        // Apply scalar update if the commit was not already applied.
-        if _, err := tx.ExecContext(ctx,
-            `UPDATE counters SET scalar = scalar - $3
+				e.Key, e.CommitID, *e.FencingToken); err != nil {
+				return fmt.Errorf("update last_token(%s): %w", e.Key, err)
+			}
+		}
+		// Apply scalar update if the commit was not already applied.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE counters SET scalar = scalar - $3
                WHERE key = $2 AND NOT EXISTS (SELECT 1 FROM applied_commits WHERE commit_id = $1)`,
-            e.CommitID, e.Key, e.Vector); err != nil {
-            return fmt.Errorf("update counters(%s): %w", e.Key, err)
-        }
-    }
+			e.CommitID, e.Key, e.Vector); err != nil {
+			return fmt.Errorf("update counters(%s): %w", e.Key, err)
+		}
+	}
 
-    if err := tx.Commit(); err != nil {
-        return err
-    }
-    return nil
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
