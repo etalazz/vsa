@@ -182,6 +182,11 @@ for T in $THS; do
   printf "threshold=%-4s  commits=%-4s  rows=%-4s  ops/commit=%-6s  ops/row=%-6s  write_reduction=%-6s  time=%ss\n" \
     "$T" "${COMMITS:-0}" "${ROWS:-0}" "$OPC" "$OPR" "$WR" "$DURATION"
 
+  # CI assertion: expect at least one commit for visibility at each threshold
+  if [ "${COMMITS:-0}" -le 0 ]; then
+    err "no commits observed at threshold=$T"; tail -n 80 "$LOG" || true; exit 1
+  fi
+
   # Note: commits count all persisted batches; rows count only entries for KEY.
   # It's expected for rows < commits when the readiness probe (warmup) or other keys
   # are flushed in a separate batch (e.g., on final flush). This does not affect

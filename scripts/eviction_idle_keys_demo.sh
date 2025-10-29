@@ -100,5 +100,6 @@ info "Observed final per-key commits on eviction: ${FINALS:-0}"
 info "Observed persisted batches (any cause): ${BATCHES:-0}"
 
 if [ "${EVICTS:-0}" -eq 0 ] && [ "${FINALS:-0}" -eq 0 ] && [ "${BATCHES:-0}" -eq 0 ]; then
-  warn "no clear eviction activity observed; try raising SLEEP_AFTER_SEC or lowering EVICT_AGE"
+  err "no eviction activity observed; try raising SLEEP_AFTER_SEC or lowering EVICT_AGE"
+  exit 1
 fi

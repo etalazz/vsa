@@ -220,6 +220,14 @@ fi
 COMMITS=$(grep -c "Persisting batch of" "$LOG" || true)
 info "Observed commit batches: $COMMITS (threshold=$THRESHOLD interval=$COMM_INT)"
 
+# CI assertions: expect at least one commit and the hot key to appear in persisted rows
+if [ "${COMMITS:-0}" -le 0 ]; then
+  err "no commits observed in zipf demo"; tail -n 80 "$LOG" || true; exit 1
+fi
+if ! grep -F "KEY: $HOT_KEY" "$LOG" >/dev/null 2>&1; then
+  err "hot key $HOT_KEY not found in persisted rows"; tail -n 80 "$LOG" || true; exit 1
+fi
+
 printf "\nTop keys by persisted occurrences (from logs):\n"
 # Count occurrences of each KEY in persisted rows (robust to padding/quotes)
 awk '

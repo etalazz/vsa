@@ -152,6 +152,15 @@ printf "Total commit batches (all keys): %s\n" "${COMMITS:-0}"
 printf "Ops/commit (approx, all req): %s\n" "$OPC"
 printf "Write reduction (hot, rows vs requests): %s\n" "$WR"
 
+# Assertions for CI stability
+if [ "${COMMITS:-0}" -le 0 ]; then
+  err "expected at least one commit batch"; exit 1; fi
+if [ "${ROWS_HOT:-0}" -le 0 ]; then
+  err "expected at least one persisted row for hot key $HOT_KEY"; exit 1; fi
+# Refunds should not be negative and should not exceed admitted hot requests
+if [ "${SUCCESSFUL_REFUNDS:-0}" -lt 0 ] || [ "$SUCCESSFUL_REFUNDS" -gt "$HOT_REQ" ]; then
+  err "invalid refund estimate: $SUCCESSFUL_REFUNDS (hot=$HOT_REQ)"; exit 1; fi
+
 printf "\n--- Tail of server log ---\n"
 tail -n 120 "$LOG" || true
 
