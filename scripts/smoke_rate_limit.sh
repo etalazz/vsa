@@ -24,8 +24,14 @@ err()  { printf "[error] %s\n" "$*" 1>&2; }
 
 start_server() {
   info "starting server on $HTTP_ADDR (rate_limit=$RATE_LIMIT) — logs: $LOG"
-  # Use a huge commit_threshold so background commits don't interfere with the vector in this smoke test
-  GOFLAGS="${GOFLAGS:-}" go run ./cmd/ratelimiter-api/main.go \
+  # Build a binary to ensure fast startup and reliable signal handling on CI runners
+  UNAME_S=$(uname -s 2>/dev/null || echo Unknown)
+  case "$UNAME_S" in
+    *MINGW*|*MSYS*|*CYGWIN*) BIN="./bin/ratelimiter-api.exe" ;;
+    *) BIN="./bin/ratelimiter-api" ;;
+  esac
+  GOFLAGS="${GOFLAGS:-}" go build -o "$BIN" ./cmd/ratelimiter-api >/dev/null 2>&1
+  "$BIN" \
     -rate_limit="$RATE_LIMIT" \
     -commit_threshold=1000000 \
     -commit_interval=100ms \
