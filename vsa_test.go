@@ -544,3 +544,43 @@ func TestVSA_OverflowEdges(t *testing.T) {
 		t.Fatalf("vector overflow guard tripped: V=%d", V)
 	}
 }
+
+// Ensure TryConsume rejects non-positive values and leaves state unchanged.
+func TestVSA_TryConsume_NonPositive(t *testing.T) {
+	v := New(5)
+	s0, vec0 := v.State()
+	if ok := v.TryConsume(0); ok {
+		t.Fatalf("TryConsume(0) should return false")
+	}
+	if ok := v.TryConsume(-1); ok {
+		t.Fatalf("TryConsume(-1) should return false")
+	}
+	s1, vec1 := v.State()
+	if s0 != s1 || vec0 != vec1 {
+		t.Fatalf("state changed on non-positive consume: before=(%d,%d) after=(%d,%d)", s0, vec0, s1, vec1)
+	}
+}
+
+// Commit(0) must be a no-op.
+func TestVSA_Commit_Zero_Noop(t *testing.T) {
+	v := New(10)
+	v.Update(3)
+	s0, vec0 := v.State()
+	v.Commit(0)
+	s1, vec1 := v.State()
+	if s0 != s1 || vec0 != vec1 {
+		t.Fatalf("Commit(0) changed state: before=(%d,%d) after=(%d,%d)", s0, vec0, s1, vec1)
+	}
+}
+
+// Close without cached gate should be safe and idempotent.
+func TestVSA_Close_NoAggregator(t *testing.T) {
+	v := New(7) // UseCachedGate is false by default
+	s0, vec0 := v.State()
+	v.Close()
+	v.Close()
+	s1, vec1 := v.State()
+	if s0 != s1 || vec0 != vec1 {
+		t.Fatalf("state changed after Close() with no aggregator: before=(%d,%d) after=(%d,%d)", s0, vec0, s1, vec1)
+	}
+}
