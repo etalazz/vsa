@@ -45,6 +45,7 @@ import (
 	"vsa"
 	"vsa/internal/ratelimiter/api"
 	"vsa/internal/ratelimiter/core"
+	"vsa/internal/ratelimiter/persistence"
 	"vsa/internal/ratelimiter/telemetry/churn"
 )
 
@@ -98,6 +99,12 @@ func main() {
 	evictionInterval := flag.Duration("eviction_interval", 10*time.Minute, "How often to scan for idle keys to evict")
 	httpAddr := flag.String("http_addr", ":8080", "HTTP listen address (e.g., :8080)")
 
+	// Persistence adapter selection (demo)
+	adapter := flag.String("persistence_adapter", "mock", "Persistence adapter: mock|redis|kafka|postgres")
+	kafkaTopic := flag.String("kafka_topic", "vsa-commits", "Kafka topic for commits (when adapter=kafka)")
+	redisTTL := flag.Duration("redis_marker_ttl", 24*time.Hour, "Redis commit marker TTL (when adapter=redis)")
+	redisAddr := flag.String("redis_addr", "", "Redis address host:port (when adapter=redis). If empty, uses a demo logging client.")
+
 	// VSA engine tuning flags (optional)
 	vsaStripes := flag.Int("vsa_stripes", 0, "Number of stripes (0=auto). Rounded to next power of two; clamped to [8,64]")
 	vsaCheapUpdate := flag.Bool("vsa_cheap_update_chooser", false, "Use per-goroutine PRNG to choose stripes on Update (no atomic.Add)")
@@ -148,7 +155,12 @@ func main() {
 	})
 
 	// 2. Initialize core components.
-	persister := core.NewMockPersister()
+	// Build a persister based on the selected adapter (demo-friendly defaults).
+	pOpts := persistence.DemoOptions{RedisMarkerTTL: *redisTTL, RedisAddr: *redisAddr, KafkaTopic: *kafkaTopic}
+	persister, err := persistence.BuildPersister(*adapter, pOpts)
+	if err != nil {
+		log.Fatalf("failed to build persister (adapter=%s): %v", *adapter, err)
+	}
 	// Build VSA options from flags so the demo showcases performance tuning knobs.
 	opts := vsa.Options{
 		Stripes:            *vsaStripes,
