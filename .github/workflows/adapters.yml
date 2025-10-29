@@ -1,0 +1,29 @@
+name: adapters
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e-redis:
+    name: E2E Redis adapter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Ensure scripts are executable
+        run: |
+          chmod +x e2e/run_e2e.sh scripts/e2_e_redis.sh
+
+      - name: Run Redis E2E via adapters script
+        run: |
+          sh scripts/e2_e_redis.sh
