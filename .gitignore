@@ -3,3 +3,5 @@
 /bin/
 /s.log
 /v.log
+__pycache__/
+*.py[cod]
