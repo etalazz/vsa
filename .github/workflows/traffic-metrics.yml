@@ -1,0 +1,83 @@
+name: Traffic Metrics
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  collect-traffic:
+    name: Collect GitHub traffic metrics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Collect traffic data
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            console.log(`Fetching traffic data for ${owner}/${repo}...`);
+            
+            // Fetch all traffic data
+            const [views, clones, referrers, paths] = await Promise.all([
+              github.rest.repos.getViews({ owner, repo, per: 'day' }),
+              github.rest.repos.getClones({ owner, repo, per: 'day' }),
+              github.rest.repos.getTopReferrers({ owner, repo }),
+              github.rest.repos.getTopPaths({ owner, repo })
+            ]);
+            
+            // Prepare the data snapshot
+            const snapshot = {
+              timestamp: new Date().toISOString(),
+              repository: `${owner}/${repo}`,
+              views: views.data,
+              clones: clones.data,
+              referrers: referrers.data,
+              paths: paths.data
+            };
+            
+            // Create filename with current date (YYYY-MM-DD)
+            const date = new Date().toISOString().split('T')[0];
+            const filename = `${date}.json`;
+            const dir = 'metrics/traffic';
+            const filepath = path.join(dir, filename);
+            
+            // Ensure directory exists
+            if (!fs.existsSync(dir)) {
+              fs.mkdirSync(dir, { recursive: true });
+            }
+            
+            // Write the snapshot
+            fs.writeFileSync(filepath, JSON.stringify(snapshot, null, 2));
+            
+            console.log(`Traffic data saved to ${filepath}`);
+            console.log(`Views count: ${views.data.count}, Clones count: ${clones.data.count}`);
+            console.log(`Referrers: ${referrers.data.length}, Paths: ${paths.data.length}`);
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add metrics/traffic/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update traffic metrics $(date -u +%Y-%m-%d)"
+            git push
+          fi
