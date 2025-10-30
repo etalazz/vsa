@@ -17,111 +17,62 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Collect traffic metrics
         uses: actions/github-script@v7
         with:
+          # Force use of your secret; do NOT fall back to the default GITHUB_TOKEN
+          github-token: ${{ secrets.TRAFFIC_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
-            
-            // Get current date in YYYY-MM-DD format
+
+            const { owner, repo } = context.repo;
             const now = new Date();
-            const dateStr = now.toISOString().split('T')[0];
-            
-            // Fetch traffic data
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            
-            console.log(`Fetching traffic metrics for ${owner}/${repo}`);
-            
-            // Collect all metrics
-            const metrics = {
-              date: dateStr,
-              timestamp: now.toISOString(),
-              repository: `${owner}/${repo}`,
-              views: null,
-              clones: null,
-              referrers: null,
-              paths: null
-            };
-            
-            // Get views
-            try {
-              const viewsResponse = await github.rest.repos.getViews({
-                owner,
-                repo,
-                per: 'day'
-              });
-              metrics.views = viewsResponse.data;
-              console.log(`✓ Views: ${viewsResponse.data.count} total, ${viewsResponse.data.uniques} unique`);
-            } catch (error) {
-              console.log(`✗ Error fetching views: ${error.message}`);
+            const dateStr = now.toISOString().slice(0,10);
+
+            core.info(`Fetching traffic metrics for ${owner}/${repo}`);
+
+            async function fetchOrThrow(label, fn, args) {
+              try {
+                const res = await fn(args);
+                if (!res || !res.data) throw new Error(`${label} returned no data`);
+                const data = res.data;
+                const keys = Array.isArray(data) ? `array(length=${data.length})` : Object.keys(data).join(',');
+                core.info(`✓ ${label}: status ${res.status}, data=${keys || 'object'}`);
+                return data;
+              } catch (e) {
+                const status = e.status ? `status=${e.status}` : '';
+                core.error(`✗ ${label} failed ${status}: ${e.message}`);
+                throw e;
+              }
             }
-            
-            // Get clones
-            try {
-              const clonesResponse = await github.rest.repos.getClones({
-                owner,
-                repo,
-                per: 'day'
-              });
-              metrics.clones = clonesResponse.data;
-              console.log(`✓ Clones: ${clonesResponse.data.count} total, ${clonesResponse.data.uniques} unique`);
-            } catch (error) {
-              console.log(`✗ Error fetching clones: ${error.message}`);
-            }
-            
-            // Get top referrers
-            try {
-              const referrersResponse = await github.rest.repos.getTopReferrers({
-                owner,
-                repo
-              });
-              metrics.referrers = referrersResponse.data;
-              console.log(`✓ Referrers: ${referrersResponse.data.length} sources`);
-            } catch (error) {
-              console.log(`✗ Error fetching referrers: ${error.message}`);
-            }
-            
-            // Get top paths
-            try {
-              const pathsResponse = await github.rest.repos.getTopPaths({
-                owner,
-                repo
-              });
-              metrics.paths = pathsResponse.data;
-              console.log(`✓ Paths: ${pathsResponse.data.length} popular paths`);
-            } catch (error) {
-              console.log(`✗ Error fetching paths: ${error.message}`);
-            }
-            
+
+            // Fetch all metrics; if any call fails, fail the job (no null snapshots)
+            const views = await fetchOrThrow('views', github.rest.repos.getViews, { owner, repo, per: 'day' });
+            const clones = await fetchOrThrow('clones', github.rest.repos.getClones, { owner, repo, per: 'day' });
+            const referrers = await fetchOrThrow('referrers', github.rest.repos.getTopReferrers, { owner, repo });
+            const pathsData = await fetchOrThrow('paths', github.rest.repos.getTopPaths, { owner, repo });
+
             // Ensure directory exists
             const metricsDir = path.join(process.env.GITHUB_WORKSPACE, 'metrics', 'traffic');
-            if (!fs.existsSync(metricsDir)) {
-              fs.mkdirSync(metricsDir, { recursive: true });
-            }
-            
-            // Write to file
+            fs.mkdirSync(metricsDir, { recursive: true });
+
+            // Write to file with a consistent schema
             const outputPath = path.join(metricsDir, `${dateStr}.json`);
-            fs.writeFileSync(outputPath, JSON.stringify(metrics, null, 2));
-            console.log(`\n✓ Metrics saved to ${outputPath}`);
-            
-            // Set output for commit step
+            const payload = {
+              collected_at: now.toISOString(),
+              repo: { owner, repo },
+              views,
+              clones,
+              referrers,
+              paths: pathsData
+            };
+            fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2));
+            core.info(`✓ Metrics saved to ${outputPath}`);
             core.setOutput('filename', `${dateStr}.json`);
 
-      - name: Commit and push metrics
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add metrics/traffic/
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: update traffic metrics for $(date -u +%Y-%m-%d)"
-            git push
-          fi
+      - name: Commit snapshot (only if files changed)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(metrics): snapshot GitHub traffic"
+          file_pattern: metrics/traffic/*.json
