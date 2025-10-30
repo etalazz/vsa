@@ -76,3 +76,18 @@ jobs:
         with:
           commit_message: "chore(metrics): snapshot GitHub traffic"
           file_pattern: metrics/traffic/*.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate Markdown report
+        run: |
+          python3 scripts/traffic_report.py
+
+      - name: Commit report (only if changed)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(metrics): update traffic REPORT.md"
+          file_pattern: metrics/traffic/REPORT.md

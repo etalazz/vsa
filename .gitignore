@@ -3,3 +3,4 @@
 /bin/
 /s.log
 /v.log
+__pycache__/
