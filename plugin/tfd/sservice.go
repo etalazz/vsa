@@ -49,8 +49,8 @@ type SService struct {
 	doneCh chan struct{}
 	opts   SServiceOptions
 	once   sync.Once
-	// flushNowCh allows external callers to request an immediate flush on the service goroutine
-	flushNowCh chan struct{}
+	// flushReqCh allows external callers to request an immediate flush on the service goroutine and wait for completion
+	flushReqCh chan chan struct{}
 }
 
 // NewSService constructs a new service. acc must be exclusive to this service
@@ -70,7 +70,7 @@ func NewSService(acc *SAccumulator, vsa VSATransformer, sink SBatchesSink, opts 
 		stopCh:     make(chan struct{}),
 		doneCh:     make(chan struct{}),
 		opts:       opts,
-		flushNowCh: make(chan struct{}, 1),
+		flushReqCh: make(chan chan struct{}, 1),
 	}
 }
 
@@ -87,17 +87,14 @@ func (s *SService) Stop() {
 	<-s.doneCh
 }
 
-// Flush requests an immediate best-effort flush on the service goroutine.
-// It is non-blocking: if a prior flush request is still pending, this call is a no-op.
+// Flush requests an immediate flush on the service goroutine and blocks until it completes.
 // Use this before durability reads (e.g., demos/tools) to reduce staleness between
 // time-capped batching and log inspection.
 func (s *SService) Flush() {
-	select {
-	case s.flushNowCh <- struct{}{}:
-		// enqueued
-	default:
-		// a previous flush request is still pending; skip to avoid blocking
-	}
+	done := make(chan struct{})
+	// Send a synchronous flush request and wait for completion
+	s.flushReqCh <- done
+	<-done
 }
 
 // Ingest enqueues a Scalar envelope (Vector is ignored). It blocks if the buffer
@@ -149,9 +146,23 @@ func (s *SService) run() {
 			// we still rely on the periodic ticker for tail bound.
 		case <-ticker.C:
 			flush()
-		case <-s.flushNowCh:
-			// Best-effort immediate flush requested by caller
+		case done := <-s.flushReqCh:
+			// Synchronous flush requested by caller: drain pending ingress, then flush
+			drain := func() {
+				for {
+					select {
+					case env := <-s.in:
+						if env.Channel == ChannelScalar {
+							s.acc.Ingest(env)
+						}
+					default:
+						return
+					}
+				}
+			}
+			drain()
 			flush()
+			close(done)
 		case <-s.stopCh:
 			// Drain remaining queued items without blocking
 			for {

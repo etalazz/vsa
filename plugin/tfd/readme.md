@@ -110,7 +110,7 @@ See `classifier.go` for the rule implementation.
 - Sink (`SBatchesSink`) persists compact `SBatch{KeyID, BucketID, NetDelta, SeqEnd}`.
 
 Admin/ops helpers:
-- `SService.Flush()` (via `Pipeline.FlushS()`) issues a best‑effort immediate flush to reduce read staleness before inspecting durability (e.g., demos/tests).
+- `SService.Flush()` (via `Pipeline.FlushS()`) performs a synchronous immediate flush on the service goroutine (it first drains pending ingress, then flushes to the sink) to reduce read staleness before inspecting durability (e.g., demos/tests).
 
 ---
 

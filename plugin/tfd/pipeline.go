@@ -72,9 +72,9 @@ func (p *Pipeline) Start() { p.s.Start() }
 // Stop stops the background service and performs a final flush.
 func (p *Pipeline) Stop() { p.s.Stop() }
 
-// FlushS requests an immediate best-effort flush on the S-lane service.
-// Useful to reduce read staleness between the time-capped batching and tools
-// that need to inspect durability (e.g., /state in demos). Non-blocking.
+// FlushS requests an immediate flush on the S-lane service and blocks until the flush
+// completes. Useful to reduce read staleness between the time-capped batching and
+// tools that need to inspect durability (e.g., /state in demos).
 func (p *Pipeline) FlushS() { p.s.Flush() }
 
 // Handle routes an already classified envelope to the appropriate lane.
