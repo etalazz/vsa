@@ -1,0 +1,216 @@
+{
+  "date": "2025-10-30",
+  "timestamp": "2025-10-30T18:00:00.000Z",
+  "repository": "etalazz/vsa",
+  "views": {
+    "count": 1250,
+    "uniques": 145,
+    "views": [
+      {
+        "timestamp": "2025-10-16T00:00:00Z",
+        "count": 85,
+        "uniques": 12
+      },
+      {
+        "timestamp": "2025-10-17T00:00:00Z",
+        "count": 92,
+        "uniques": 15
+      },
+      {
+        "timestamp": "2025-10-18T00:00:00Z",
+        "count": 78,
+        "uniques": 10
+      },
+      {
+        "timestamp": "2025-10-19T00:00:00Z",
+        "count": 105,
+        "uniques": 18
+      },
+      {
+        "timestamp": "2025-10-20T00:00:00Z",
+        "count": 98,
+        "uniques": 14
+      },
+      {
+        "timestamp": "2025-10-21T00:00:00Z",
+        "count": 110,
+        "uniques": 16
+      },
+      {
+        "timestamp": "2025-10-22T00:00:00Z",
+        "count": 88,
+        "uniques": 11
+      },
+      {
+        "timestamp": "2025-10-23T00:00:00Z",
+        "count": 95,
+        "uniques": 13
+      },
+      {
+        "timestamp": "2025-10-24T00:00:00Z",
+        "count": 102,
+        "uniques": 15
+      },
+      {
+        "timestamp": "2025-10-25T00:00:00Z",
+        "count": 89,
+        "uniques": 9
+      },
+      {
+        "timestamp": "2025-10-26T00:00:00Z",
+        "count": 76,
+        "uniques": 8
+      },
+      {
+        "timestamp": "2025-10-27T00:00:00Z",
+        "count": 82,
+        "uniques": 10
+      },
+      {
+        "timestamp": "2025-10-28T00:00:00Z",
+        "count": 72,
+        "uniques": 7
+      },
+      {
+        "timestamp": "2025-10-29T00:00:00Z",
+        "count": 78,
+        "uniques": 7
+      }
+    ]
+  },
+  "clones": {
+    "count": 45,
+    "uniques": 12,
+    "clones": [
+      {
+        "timestamp": "2025-10-16T00:00:00Z",
+        "count": 4,
+        "uniques": 2
+      },
+      {
+        "timestamp": "2025-10-17T00:00:00Z",
+        "count": 3,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-18T00:00:00Z",
+        "count": 2,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-19T00:00:00Z",
+        "count": 5,
+        "uniques": 2
+      },
+      {
+        "timestamp": "2025-10-20T00:00:00Z",
+        "count": 3,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-21T00:00:00Z",
+        "count": 4,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-22T00:00:00Z",
+        "count": 2,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-23T00:00:00Z",
+        "count": 3,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-24T00:00:00Z",
+        "count": 4,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-25T00:00:00Z",
+        "count": 3,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-26T00:00:00Z",
+        "count": 4,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-27T00:00:00Z",
+        "count": 3,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2025-10-28T00:00:00Z",
+        "count": 2,
+        "uniques": 0
+      },
+      {
+        "timestamp": "2025-10-29T00:00:00Z",
+        "count": 3,
+        "uniques": 0
+      }
+    ]
+  },
+  "referrers": [
+    {
+      "referrer": "github.com",
+      "count": 450,
+      "uniques": 45
+    },
+    {
+      "referrer": "google.com",
+      "count": 280,
+      "uniques": 38
+    },
+    {
+      "referrer": "reddit.com",
+      "count": 185,
+      "uniques": 22
+    },
+    {
+      "referrer": "news.ycombinator.com",
+      "count": 120,
+      "uniques": 18
+    },
+    {
+      "referrer": "twitter.com",
+      "count": 95,
+      "uniques": 12
+    }
+  ],
+  "paths": [
+    {
+      "path": "/etalazz/vsa",
+      "title": "etalazz/vsa: Vector-Scalar Accumulator",
+      "count": 425,
+      "uniques": 78
+    },
+    {
+      "path": "/etalazz/vsa/blob/master/readme.md",
+      "title": "vsa/readme.md at master · etalazz/vsa",
+      "count": 210,
+      "uniques": 45
+    },
+    {
+      "path": "/etalazz/vsa/blob/master/docs/FAQ.md",
+      "title": "vsa/FAQ.md at master · etalazz/vsa",
+      "count": 165,
+      "uniques": 32
+    },
+    {
+      "path": "/etalazz/vsa/tree/master/cmd",
+      "title": "vsa/cmd at master · etalazz/vsa",
+      "count": 98,
+      "uniques": 18
+    },
+    {
+      "path": "/etalazz/vsa/issues",
+      "title": "Issues · etalazz/vsa",
+      "count": 75,
+      "uniques": 15
+    }
+  ]
+}
