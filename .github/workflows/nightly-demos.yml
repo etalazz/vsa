@@ -1,0 +1,140 @@
+name: Nightly Demos
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-demos
+  cancel-in-progress: false
+
+jobs:
+  demos:
+    name: Demo scripts smoke suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify modules
+        run: |
+          go mod tidy -v
+          go mod download
+
+      - name: Run smoke_rate_limit.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          RATE_LIMIT: '5'
+        run: sh scripts/smoke_rate_limit.sh
+
+      - name: Run headers_contract_check.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          RATE_LIMIT: '3'
+        run: sh scripts/headers_contract_check.sh
+
+      - name: Run refund_semantics_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          RATE_LIMIT: '50'
+        run: sh scripts/refund_semantics_demo.sh
+
+      - name: Run batching_threshold_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          THRESHOLD: '32'
+          COMM_INT: '50ms'
+          N_REQ: '4000'
+          CONC: '8'
+        run: sh scripts/batching_threshold_demo.sh
+
+      - name: Run max_age_flush_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          THRESHOLD: '500'
+          MAX_AGE: '1s'
+          COMM_INT: '100ms'
+          N_REQ: '20'
+          SLEEP_AFTER_SEC: '3'
+        run: sh scripts/max_age_flush_demo.sh
+
+      - name: Run eviction_idle_keys_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          THRESHOLD: '32'
+          KEY_COUNT: '12'
+          REQS_PER_KEY: '4'
+          EVICT_AGE: '2s'
+          EVICT_INT: '1s'
+          SLEEP_AFTER_SEC: '4'
+        run: sh scripts/eviction_idle_keys_demo.sh
+
+      - name: Run final_flush_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          THRESHOLD: '32'
+          KEYS: 'alice-key bob-key'
+          REQS_PER_KEY: '12'
+        run: sh scripts/final_flush_demo.sh
+
+      - name: Run real_scenario_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          RATE_LIMIT: '100000'
+          THRESHOLD: '64'
+          COMM_INT: '20ms'
+          MAX_AGE: '50ms'
+          EVICT_AGE: '2s'
+          EVICT_INT: '1s'
+          HOT_KEY: 'hot-1'
+          COLD_KEYS: '30'
+          N_REQ: '6000'
+          CONC: '12'
+          REFUND_PCT: '30'
+        run: sh scripts/real_scenario_demo.sh
+
+      - name: Run threshold_sweep.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          THS: '32 64'
+          REQ: '4000'
+          CONC: '8'
+          COMM_INT: '20ms'
+        run: sh scripts/threshold_sweep.sh
+
+      - name: Run zipf_hotkey_demo.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+          FAST: '1'
+          N_REQ: '6000'
+          CONC: '16'
+        run: sh scripts/zipf_hotkey_demo.sh
+
+      - name: Run run_hotkey_tests.sh
+        env:
+          GOMAXPROCS: '1'
+          CGO_ENABLED: '0'
+        run: sh scripts/run_hotkey_tests.sh

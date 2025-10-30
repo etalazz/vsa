@@ -1,10 +1,28 @@
 name: adapters
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
+    branches: ["master"]
+    paths:
+      - "adapters/**"
+      - "scripts/e2_e_redis.sh"
+      - "e2e/**"
+      - ".github/workflows/adapters.yml"
+  push:
+    branches: ["master"]
+    paths:
+      - "adapters/**"
+      - "scripts/e2_e_redis.sh"
+      - "e2e/**"
+      - ".github/workflows/adapters.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adapters-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   e2e-redis:
@@ -13,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Setup Go
         uses: actions/setup-go@v5
