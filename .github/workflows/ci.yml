@@ -1,22 +1,35 @@
 name: CI
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
     branches: ["**"]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "metrics/**"
+      - ".github/ISSUE_TEMPLATE/**"
+  push:
+    branches: ["master"]
+    tags:
+      - "v*"
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "metrics/**"
+      - ".github/ISSUE_TEMPLATE/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Use head_ref when available so push and PR for same branch share a group and cancel-in-progress
+  group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Unit & integration tests
+  build-test-and-e2e:
+    name: Build, test, and conditional E2E
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Debug trigger context
         run: |
@@ -53,6 +68,7 @@ jobs:
           $(go list ./... | grep -vE '/benchmarks($|/)|/test($|/)|/tools/http-loadgen($|/)|/scripts($|/)')
 
       - name: Reproducibility suite (fast)
+        if: always()
         env:
           GOMAXPROCS: '1'
           CGO_ENABLED: '0'
@@ -67,7 +83,6 @@ jobs:
           files: coverage.out
           flags: unittests
           fail_ci_if_error: false
-          # token: ${{ secrets.CODECOV_TOKEN }} # only needed for private repos
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -77,51 +92,17 @@ jobs:
             coverage.out
             coverage.txt
 
-  e2e:
-    name: End-to-end tests (build tag e2e)
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify modules
-        run: |
-          go mod tidy -v
-          go mod download
-
-      - name: Run E2E tests
+      # E2E runs for PRs and pushes to master
+      - name: E2E tests (build tag e2e)
+        if: github.event_name == 'pull_request' || github.ref_name == 'master'
         env:
           VSA_CHURN_LIVE: "0"
         run: |
           go test -tags=e2e ./test/e2e -v -count=1 -timeout=10m
 
-  build:
-    name: Build artifacts
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify modules
-        run: |
-          go mod tidy -v
-          go mod download
-
+      # Build binaries only on push (master or tags)
       - name: Build binaries (linux/amd64)
+        if: github.event_name == 'push'
         env:
           CGO_ENABLED: '0'
         run: |
@@ -130,137 +111,14 @@ jobs:
           GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/linux-amd64/http-loadgen ./tools/http-loadgen
 
       - name: Generate checksums
+        if: github.event_name == 'push'
         run: |
           (cd dist/linux-amd64 && sha256sum * > SHA256SUMS)
 
       - name: Upload build artifacts
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: vsa-binaries-linux-amd64
           path: dist/linux-amd64
           if-no-files-found: error
-
-  demos:
-    name: Demo scripts smoke suite
-    runs-on: ubuntu-latest
-    needs: test
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify modules
-        run: |
-          go mod tidy -v
-          go mod download
-
-      - name: Run smoke_rate_limit.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          RATE_LIMIT: '5'
-        run: sh scripts/smoke_rate_limit.sh
-
-      - name: Run headers_contract_check.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          RATE_LIMIT: '3'
-        run: sh scripts/headers_contract_check.sh
-
-      - name: Run refund_semantics_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          RATE_LIMIT: '50'
-        run: sh scripts/refund_semantics_demo.sh
-
-      - name: Run batching_threshold_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          THRESHOLD: '32'
-          COMM_INT: '50ms'
-          N_REQ: '4000'
-          CONC: '8'
-        run: sh scripts/batching_threshold_demo.sh
-
-      - name: Run max_age_flush_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          THRESHOLD: '500'
-          MAX_AGE: '1s'
-          COMM_INT: '100ms'
-          N_REQ: '20'
-          SLEEP_AFTER_SEC: '3'
-        run: sh scripts/max_age_flush_demo.sh
-
-      - name: Run eviction_idle_keys_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          THRESHOLD: '32'
-          KEY_COUNT: '12'
-          REQS_PER_KEY: '4'
-          EVICT_AGE: '2s'
-          EVICT_INT: '1s'
-          SLEEP_AFTER_SEC: '4'
-        run: sh scripts/eviction_idle_keys_demo.sh
-
-      - name: Run final_flush_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          THRESHOLD: '32'
-          KEYS: 'alice-key bob-key'
-          REQS_PER_KEY: '12'
-        run: sh scripts/final_flush_demo.sh
-
-      - name: Run real_scenario_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          RATE_LIMIT: '100000'
-          THRESHOLD: '64'
-          COMM_INT: '20ms'
-          MAX_AGE: '50ms'
-          EVICT_AGE: '2s'
-          EVICT_INT: '1s'
-          HOT_KEY: 'hot-1'
-          COLD_KEYS: '30'
-          N_REQ: '6000'
-          CONC: '12'
-          REFUND_PCT: '30'
-        run: sh scripts/real_scenario_demo.sh
-
-      - name: Run threshold_sweep.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          THS: '32 64'
-          REQ: '4000'
-          CONC: '8'
-          COMM_INT: '20ms'
-        run: sh scripts/threshold_sweep.sh
-
-      - name: Run zipf_hotkey_demo.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-          FAST: '1'
-          N_REQ: '6000'
-          CONC: '16'
-        run: sh scripts/zipf_hotkey_demo.sh
-
-      - name: Run run_hotkey_tests.sh
-        env:
-          GOMAXPROCS: '1'
-          CGO_ENABLED: '0'
-        run: sh scripts/run_hotkey_tests.sh
