@@ -8,6 +8,12 @@ This script reads the latest JSON snapshot from metrics/traffic/ and displays:
 - Daily averages
 - Top referrers
 - Popular paths
+
+Usage:
+    python3 summarize_traffic.py [metrics_dir]
+
+Arguments:
+    metrics_dir    Optional path to metrics directory (default: ../metrics from script location)
 """
 
 import json
@@ -124,6 +130,11 @@ def summarize_metrics(snapshot_path):
 
 def main():
     """Main function to run the summary."""
+    # Check for help flag
+    if len(sys.argv) > 1 and sys.argv[1] in ['-h', '--help', 'help']:
+        print(__doc__)
+        sys.exit(0)
+    
     # Determine the metrics directory
     # Default to ../metrics from script location, or use provided argument
     if len(sys.argv) > 1:
