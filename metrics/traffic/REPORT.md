@@ -1,21 +1,21 @@
 # Traffic Report for etalazz/vsa
 
-Collected at: 2025-10-31T00:19:20.277Z
+Collected at: 2025-10-31T14:02:50.058Z
 
 ## Summary (last 14 days)
 
-- Views: 4164
+- Views: 4489
 - Unique visitors: 337
-- Clones: 607
-- Unique cloners: 247
+- Clones: 643
+- Unique cloners: 256
 
 ## Key ratios and averages
 
-- Views per unique visitor: 12.36
-- Clone-to-view conversion: 14.6%
-- Unique cloner-to-unique visitor: 73.3%
-- Daily average views: 320.31
-- Daily average clones: 46.69
+- Views per unique visitor: 13.32
+- Clone-to-view conversion: 14.3%
+- Unique cloner-to-unique visitor: 76.0%
+- Daily average views: 320.64
+- Daily average clones: 45.93
 
 ## Spike flags
 
@@ -29,7 +29,8 @@ Collected at: 2025-10-31T00:19:20.277Z
 - 2025-10-27: views/visitor>5 (views=551, uniques=6, clones=57, unique_cloners=36)
 - 2025-10-28: views/visitor>5 (views=253, uniques=5, clones=28, unique_cloners=18)
 - 2025-10-29: views/visitor>5 (views=341, uniques=6, clones=67, unique_cloners=31)
-- 2025-10-30: views/visitor>5, clones/views>20% (views=291, uniques=2, clones=118, unique_cloners=45)
+- 2025-10-30: views/visitor>5, clones/views>20% (views=334, uniques=2, clones=118, unique_cloners=45)
+- 2025-10-31: views/visitor>5 (views=282, uniques=2, clones=36, unique_cloners=27)
 
 ## Daily breakdown
 
@@ -47,7 +48,8 @@ Collected at: 2025-10-31T00:19:20.277Z
 | 2025-10-27 | 551 | 6 | 57 | 36 | 91.83 | 1.58 | 0.10 |
 | 2025-10-28 | 253 | 5 | 28 | 18 | 50.60 | 1.56 | 0.11 |
 | 2025-10-29 | 341 | 6 | 67 | 31 | 56.83 | 2.16 | 0.20 |
-| 2025-10-30 | 291 | 2 | 118 | 45 | 145.50 | 2.62 | 0.41 |
+| 2025-10-30 | 334 | 2 | 118 | 45 | 167.00 | 2.62 | 0.35 |
+| 2025-10-31 | 282 | 2 | 36 | 27 | 141.00 | 1.33 | 0.13 |
 
 ## Notes
 
