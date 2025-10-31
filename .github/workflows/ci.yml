@@ -23,7 +23,6 @@ permissions:
   contents: read
 
 concurrency:
-  # Use head_ref when available so push and PR for same branch share a group and cancel-in-progress
   group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -92,7 +91,6 @@ jobs:
             coverage.out
             coverage.txt
 
-      # E2E runs for PRs and pushes to master
       - name: E2E tests (build tag e2e)
         if: github.event_name == 'pull_request' || github.ref_name == 'master'
         env:
@@ -100,7 +98,6 @@ jobs:
         run: |
           go test -tags=e2e ./test/e2e -v -count=1 -timeout=10m
 
-      # Build binaries only on push (master or tags)
       - name: Build binaries (linux/amd64)
         if: github.event_name == 'push'
         env:
