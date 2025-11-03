@@ -1,21 +1,21 @@
 # Traffic Report for etalazz/vsa
 
-Collected at: 2025-11-02T00:21:09.781Z
+Collected at: 2025-11-03T00:20:41.492Z
 
 ## Summary (last 14 days)
 
-- Views: 4327
-- Unique visitors: 268
-- Clones: 652
-- Unique cloners: 258
+- Views: 4038
+- Unique visitors: 153
+- Clones: 655
+- Unique cloners: 256
 
 ## Key ratios and averages
 
-- Views per unique visitor: 16.15
-- Clone-to-view conversion: 15.1%
-- Unique cloner-to-unique visitor: 96.3%
-- Daily average views: 309.07
-- Daily average clones: 46.57
+- Views per unique visitor: 26.39
+- Clone-to-view conversion: 16.2%
+- Unique cloner-to-unique visitor: 167.3%
+- Daily average views: 288.43
+- Daily average clones: 46.79
 
 ## Spike flags
 
@@ -31,13 +31,13 @@ Collected at: 2025-11-02T00:21:09.781Z
 - 2025-10-30: views/visitor>5, clones/views>20% (views=334, uniques=2, clones=118, unique_cloners=45)
 - 2025-10-31: views/visitor>5 (views=508, uniques=4, clones=52, unique_cloners=39)
 - 2025-11-01: views/visitor>5, clones/views>20% (views=33, uniques=2, clones=9, unique_cloners=8)
+- 2025-11-02: views/visitor>5, clones/views>20% (views=28, uniques=1, clones=10, unique_cloners=8)
 
 ## Daily breakdown
 
 | Date | Views | Unique visitors | Clones | Unique cloners | Views/Visitor | Clones/Unique Cloner | Clones/Views |
 |------|------:|-----------------:|-------:|---------------:|--------------:|----------------------:|-------------:|
-| 2025-10-19 | 281 | 118 | 7 | 6 | 2.38 | 1.17 | 0.02 |
-| 2025-10-20 | 188 | 75 | 4 | 3 | 2.51 | 1.33 | 0.02 |
+| 2025-10-20 | 152 | 69 | 4 | 3 | 2.20 | 1.33 | 0.03 |
 | 2025-10-21 | 312 | 33 | 33 | 24 | 9.45 | 1.38 | 0.11 |
 | 2025-10-22 | 157 | 18 | 11 | 10 | 8.72 | 1.10 | 0.07 |
 | 2025-10-23 | 337 | 10 | 65 | 42 | 33.70 | 1.55 | 0.19 |
@@ -50,6 +50,7 @@ Collected at: 2025-11-02T00:21:09.781Z
 | 2025-10-30 | 334 | 2 | 118 | 45 | 167.00 | 2.62 | 0.35 |
 | 2025-10-31 | 508 | 4 | 52 | 39 | 127.00 | 1.33 | 0.10 |
 | 2025-11-01 | 33 | 2 | 9 | 8 | 16.50 | 1.12 | 0.27 |
+| 2025-11-02 | 28 | 1 | 10 | 8 | 28.00 | 1.25 | 0.36 |
 
 ## Notes
 
