@@ -62,6 +62,7 @@ The VSA is an architectural pattern and data structure that provides guaranteed 
 - [10. Reference Implementation: A High-Performance Rate Limiter](#10-reference-implementation-a-high-performance-rate-limiter)
 - [11. Benchmarks — Real-World Efficiency](#11-benchmarks--real-world-efficiency)
 - [12. Summary — Results at a glance](#12-summary--results-at-a-glance)
+- [13. Using the VSA in Go (practical examples)](#13-using-the-vsa-in-go-practical-examples)
 
 ---
 
@@ -332,3 +333,202 @@ Run the A/B harness yourself (quick start)
 
 Bottom line
 - If your system pays for every write, VSA’s ability to “commit the net effect” yields dramatic I/O reduction and better end-to-end performance under churn. If you only need an in-process counter, a plain atomic is still the simplest and fastest per-op.
+
+
+---
+
+## 13. Using the VSA in Go (practical examples)
+
+This section shows how to implement, integrate, and operate the Vector–Scalar Accumulator (VSA) in real code. It includes a minimal “hello, VSA” example, an advanced high‑throughput example, and practical tips/pitfalls gathered from production experiments.
+
+If you want to see a complete end‑to‑end wiring (including the two‑lane S/V pipeline and a tiny HTTP proxy), browse:
+- cmd/tfd-proxy (interactive demo server with VSA in the S‑lane)
+- plugin/tfd (opinionated wiring around VSA for time‑windowed counters)
+
+### Basic usage: initialize, consume, refund, and commit
+
+The VSA tracks one resource. You typically keep one VSA instance per logical key (user, API token, product, etc.).
+
+```text
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    vsa "github.com/etalazz/vsa"
+)
+
+// pretend durable store
+func persistToDB(ctx context.Context, key string, net int64) error {
+    // persist the net effect (sign matters). For a limiter/inventory, you often
+    // subtract the magnitude from the durable scalar. Here we just sleep.
+    _ = key
+    _ = net
+    time.Sleep(200 * time.Microsecond)
+    return nil
+}
+
+func main() {
+    // 1) Start each VSA with the last known durable scalar, e.g., from DB.
+    rl := vsa.New(1000) // 1000 units available at last checkpoint
+
+    // 2) Gate a request: TryConsume checks availability atomically and reserves.
+    if rl.TryConsume(3) { // reserve 3 units
+        fmt.Println("ok: reserved 3")
+    } else {
+        fmt.Println("deny: not enough capacity")
+    }
+
+    // 3) Read the instantaneous availability (O(1)).
+    fmt.Println("available now:", rl.Available())
+
+    // 4) Optional: try to refund if work was canceled/failed.
+    if rl.TryRefund(2) {
+        fmt.Println("refunded 2")
+    }
+
+    // 5) Commit when the net in‑memory vector grows big enough to justify I/O.
+    const threshold = int64(50)
+    if need, net := rl.CheckCommit(threshold); need {
+        // Persist the net effect. Use the sign (positive/negative) as designed
+        // for your domain. After a successful write, notify the VSA.
+        if err := persistToDB(context.Background(), "acct:123", net); err == nil {
+            rl.Commit(net)
+        }
+    }
+}
+```
+
+Notes
+- Use TryConsume/TryRefund for gating flows where capacity matters. They preserve safety under contention.
+- Update(value) is a raw delta (±) that bypasses gating. It’s useful when you are mirroring an external source of truth into a VSA, but prefer TryConsume/TryRefund for capacity checks.
+
+### Advanced: high‑throughput, multi‑goroutine service
+
+This example shows how to configure VSA for hot keys and run a background committer that writes only the net effect. It illustrates why VSA improves tail latency and reduces write amplification.
+
+```text
+package main
+
+import (
+    "context"
+    "log"
+    "math/rand"
+    "sync"
+    "time"
+
+    vsa "github.com/etalazz/vsa"
+)
+
+func durableWrite(ctx context.Context, key string, net int64) error {
+    // Simulate a relatively slow durable path (DB/replication/network).
+    time.Sleep(500 * time.Microsecond)
+    return nil
+}
+
+func main() {
+    // Tune options for a contended (hot) key scenario.
+    opts := vsa.Options{
+        Stripes:           128,                 // reduce cache‑line contention
+        UseCachedGate:     true,                // background net cache for quick checks
+        CacheInterval:     100 * time.Microsecond,
+        CacheSlack:        0,                   // conservative slack; raise if very hot
+        FastPathGuard:     64,                  // lock‑free path when far from the limit
+        HierarchicalGroups: 4,                  // faster reads of the current vector
+    }
+    limiter := vsa.NewWithOptions(10_000, opts)
+    defer limiter.Close() // required when UseCachedGate is enabled
+
+    // Background committer: flush when |A_net| crosses a threshold or on max‑age.
+    const (
+        commitThreshold = int64(512) // business/risk decision
+        maxAge          = 25 * time.Millisecond
+    )
+
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    go func() {
+        ticker := time.NewTicker(maxAge)
+        defer ticker.Stop()
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-ticker.C:
+                // time‑based flush: read current A_net and commit even if below threshold
+                if need, net := limiter.CheckCommit(1); need { // 1 => commit any non‑zero
+                    if err := durableWrite(ctx, "hot-key", net); err == nil {
+                        limiter.Commit(net)
+                    }
+                }
+            default:
+                // threshold‑driven flush: when |A_net| ≥ commitThreshold
+                if need, net := limiter.CheckCommit(commitThreshold); need {
+                    if err := durableWrite(ctx, "hot-key", net); err == nil {
+                        limiter.Commit(net)
+                    }
+                }
+                // Sleep a hair to avoid busy loop; in real services, this is often
+                // integrated with a work queue or back‑pressure signal instead.
+                time.Sleep(100 * time.Microsecond)
+            }
+        }
+    }()
+
+    // Many workers competing on the same key.
+    var wg sync.WaitGroup
+    workers := 32
+    wg.Add(workers)
+    for w := 0; w < workers; w++ {
+        go func() {
+            defer wg.Done()
+            rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+            for i := 0; i < 10_000; i++ {
+                // 50% churn: simulate reserve vs cancel/refund.
+                if rng.Intn(100) < 50 {
+                    _ = limiter.TryConsume(1)
+                } else {
+                    _ = limiter.TryRefund(1)
+                }
+                // do real work here…
+            }
+        }()
+    }
+    wg.Wait()
+
+    // Final flush on shutdown (optional): commit any remaining net.
+    if need, net := limiter.CheckCommit(1); need {
+        if err := durableWrite(ctx, "hot-key", net); err == nil {
+            limiter.Commit(net)
+        }
+    }
+}
+```
+
+Why this performs well
+- Hot paths (TryConsume/TryRefund) are mostly lock‑free and stripe across cache lines.
+- The committer persists only the net drift, not individual operations, cutting durable writes by orders of magnitude under churn.
+- The cached gate and hierarchical groups reduce cross‑core cache traffic for availability checks at high P.
+
+### Common pitfalls and tips
+
+- Do not forget Commit: After you successfully persist the net effect, always call Commit(net). This maintains the invariant S_new = S_old − |A_net_committed| and removes that portion from the in‑memory vector. Skipping it will double‑count.
+- Use one VSA per key: VSA tracks one resource. For many resources, keep a map[string]*VSA (or sharded map) and pick by key.
+- Choose the right API:
+  - TryConsume/TryRefund for capacity‑checked flows (safest under contention).
+  - Update(±n) for blind mirroring of external deltas (no gating).
+- Thresholds and max‑age: Choose commitThreshold based on risk and I/O budget. Pair with a max‑age timer to bound the crash‑loss window even at low traffic.
+- Close when using cached gate: If Options.UseCachedGate is true, call Close() on shutdown to stop the background aggregator.
+- Hot‑key contention: Increase Options.Stripes (power of two) and consider FastPathGuard and HierarchicalGroups. Benchmarks under benchmarks/ show trade‑offs.
+- Integer ranges: Counters are int64; keep values well away from overflow. Negative consumptions aren’t supported by TryConsume; use TryRefund or Update(−n) carefully.
+- Mixing VSA with time windows: VSA is the core per‑key accumulator. If you need time‑bucketed semantics (rate limiting, sliding windows), see plugin/tfd for a complete pipeline that composes VSA with per‑bucket classifiers and sinks.
+
+- Multi‑instance deployments (NJobs): When you run N copies of a job/service against the same key with independent VSAs and a shared database, each job can admit up to (threshold-1) requests before it flushes. In the worst case, the system may allow roughly NJobs * (threshold-1) simultaneous requests when none of the jobs have flushed. This must be addressed explicitly by developers in whichever way they see fit. One simple approach is to divide the "vector budget" evenly across jobs, e.g., set `vectorPerJob = |vector|/NJobs` and gate using that share so the bound becomes `maxSimultaneousRequests = scalar + NJobs * vectorPerJob = scalar + |vector|`. Alternatives include lowering per‑instance thresholds by ~N, introducing a lightweight coordinator, or flushing more aggressively under contention.
+
+Further reading
+- cmd/tfd-proxy: a tiny server you can curl to see S‑lane batching and V‑lane ordering.
+- docs/demos.md: step‑by‑step demos and scripts.
+- plugin/tfd/readme.md: how the production‑style pipeline wires around VSA.
