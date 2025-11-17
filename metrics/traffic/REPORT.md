@@ -1,26 +1,25 @@
 # Traffic Report for etalazz/vsa
 
-Collected at: 2025-11-16T00:21:28.579Z
+Collected at: 2025-11-17T00:20:19.718Z
 
 ## Summary (last 14 days)
 
-- Views: 289
+- Views: 261
 - Unique visitors: 11
-- Clones: 228
-- Unique cloners: 120
+- Clones: 232
+- Unique cloners: 118
 
 ## Key ratios and averages
 
-- Views per unique visitor: 26.27
-- Clone-to-view conversion: 78.9%
-- Unique cloner-to-unique visitor: 1090.9%
-- Daily average views: 20.64
-- Daily average clones: 16.29
+- Views per unique visitor: 23.73
+- Clone-to-view conversion: 88.9%
+- Unique cloner-to-unique visitor: 1072.7%
+- Daily average views: 18.64
+- Daily average clones: 16.57
 
 ## Spike flags
 
-- 2025-11-02: views/visitor>5 (views=28, uniques=1, clones=4, unique_cloners=4)
-- 2025-11-03: clones/views>20% (views=7, uniques=2, clones=13, unique_cloners=12)
+- 2025-11-03: clones/views>20% (views=7, uniques=2, clones=6, unique_cloners=6)
 - 2025-11-04: clones/views>20% (views=8, uniques=4, clones=9, unique_cloners=8)
 - 2025-11-05: views/visitor>5 (views=102, uniques=2, clones=13, unique_cloners=12)
 - 2025-11-06: views/visitor>5, clones/views>20% (views=8, uniques=1, clones=18, unique_cloners=14)
@@ -37,8 +36,7 @@ Collected at: 2025-11-16T00:21:28.579Z
 
 | Date | Views | Unique visitors | Clones | Unique cloners | Views/Visitor | Clones/Unique Cloner | Clones/Views |
 |------|------:|-----------------:|-------:|---------------:|--------------:|----------------------:|-------------:|
-| 2025-11-02 | 28 | 1 | 4 | 4 | 28.00 | 1.00 | 0.14 |
-| 2025-11-03 | 7 | 2 | 13 | 12 | 3.50 | 1.08 | 1.86 |
+| 2025-11-03 | 7 | 2 | 6 | 6 | 3.50 | 1.00 | 0.86 |
 | 2025-11-04 | 8 | 4 | 9 | 8 | 2.00 | 1.12 | 1.12 |
 | 2025-11-05 | 102 | 2 | 13 | 12 | 51.00 | 1.08 | 0.13 |
 | 2025-11-06 | 8 | 1 | 18 | 14 | 8.00 | 1.29 | 2.25 |
@@ -51,6 +49,7 @@ Collected at: 2025-11-16T00:21:28.579Z
 | 2025-11-13 | 30 | 2 | 21 | 13 | 15.00 | 1.62 | 0.70 |
 | 2025-11-14 | 0 | 0 | 30 | 10 | 0.00 | 3.00 | 0.00 |
 | 2025-11-15 | 22 | 3 | 17 | 13 | 7.33 | 1.31 | 0.77 |
+| 2025-11-16 | 0 | 0 | 15 | 12 | 0.00 | 1.25 | 0.00 |
 
 ## Notes
 
