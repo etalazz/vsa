@@ -1,26 +1,25 @@
 # Traffic Report for etalazz/vsa
 
-Collected at: 2025-11-24T00:21:30.273Z
+Collected at: 2025-11-25T00:18:50.365Z
 
 ## Summary (last 14 days)
 
-- Views: 263
-- Unique visitors: 6
-- Clones: 244
-- Unique cloners: 123
+- Views: 255
+- Unique visitors: 5
+- Clones: 231
+- Unique cloners: 119
 
 ## Key ratios and averages
 
-- Views per unique visitor: 43.83
-- Clone-to-view conversion: 92.8%
-- Unique cloner-to-unique visitor: 2050.0%
-- Daily average views: 18.79
-- Daily average clones: 17.43
+- Views per unique visitor: 51.00
+- Clone-to-view conversion: 90.6%
+- Unique cloner-to-unique visitor: 2380.0%
+- Daily average views: 18.21
+- Daily average clones: 16.50
 
 ## Spike flags
 
-- 2025-11-10: views/visitor>5, clones/views>20% (views=23, uniques=2, clones=20, unique_cloners=12)
-- 2025-11-11: views/visitor>5, clones/views>20% (views=17, uniques=1, clones=23, unique_cloners=10)
+- 2025-11-11: views/visitor>5, clones/unique_cloner>3, clones/views>20% (views=17, uniques=1, clones=17, unique_cloners=5)
 - 2025-11-12: views/visitor>5, clones/views>20% (views=12, uniques=1, clones=19, unique_cloners=10)
 - 2025-11-13: views/visitor>5, clones/views>20% (views=30, uniques=2, clones=21, unique_cloners=13)
 - 2025-11-15: views/visitor>5, clones/views>20% (views=22, uniques=3, clones=17, unique_cloners=13)
@@ -29,13 +28,13 @@ Collected at: 2025-11-24T00:21:30.273Z
 - 2025-11-19: views/visitor>5, clones/views>20% (views=28, uniques=1, clones=20, unique_cloners=14)
 - 2025-11-20: views/visitor>5, clones/views>20% (views=8, uniques=1, clones=9, unique_cloners=8)
 - 2025-11-22: clones/views>20% (views=4, uniques=1, clones=13, unique_cloners=11)
+- 2025-11-24: views/visitor>5, clones/views>20% (views=15, uniques=1, clones=13, unique_cloners=12)
 
 ## Daily breakdown
 
 | Date | Views | Unique visitors | Clones | Unique cloners | Views/Visitor | Clones/Unique Cloner | Clones/Views |
 |------|------:|-----------------:|-------:|---------------:|--------------:|----------------------:|-------------:|
-| 2025-11-10 | 23 | 2 | 20 | 12 | 11.50 | 1.67 | 0.87 |
-| 2025-11-11 | 17 | 1 | 23 | 10 | 17.00 | 2.30 | 1.35 |
+| 2025-11-11 | 17 | 1 | 17 | 5 | 17.00 | 3.40 | 1.00 |
 | 2025-11-12 | 12 | 1 | 19 | 10 | 12.00 | 1.90 | 1.58 |
 | 2025-11-13 | 30 | 2 | 21 | 13 | 15.00 | 1.62 | 0.70 |
 | 2025-11-14 | 0 | 0 | 30 | 10 | 0.00 | 3.00 | 0.00 |
@@ -48,6 +47,7 @@ Collected at: 2025-11-24T00:21:30.273Z
 | 2025-11-21 | 0 | 0 | 14 | 11 | 0.00 | 1.27 | 0.00 |
 | 2025-11-22 | 4 | 1 | 13 | 11 | 4.00 | 1.18 | 3.25 |
 | 2025-11-23 | 0 | 0 | 17 | 16 | 0.00 | 1.06 | 0.00 |
+| 2025-11-24 | 15 | 1 | 13 | 12 | 15.00 | 1.08 | 0.87 |
 
 ## Notes
 
