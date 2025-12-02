@@ -281,40 +281,40 @@ func (v *VSA) CheckCommit(threshold int64) (bool, int64) {
 // Per VSA: S_new = S_old - A_net_committed, and the in-memory vector is reduced by the same amount.
 // We do not sweep/reset stripes here to keep Update lock-free; instead we track a committedOffset.
 func (v *VSA) Commit(committedVector int64) {
-    if committedVector == 0 {
-        return
-    }
-    // Serialize with TryConsume/TryRefund so the gate observes a consistent
-    // (S, committedOffset) pair relative to the subsequent in-memory update.
-    // IMPORTANT: The vector provided may be stale by the time we commit due to
-    // concurrent TryConsume/TryRefund. To preserve the availability invariant
-    // A = S - |net| across commits under concurrency, we recompute the current
-    // effective net and only commit up to its magnitude, in the net's direction.
-    v.tryMu.Lock()
-    // Recompute current net under the lock to derive a safe, aligned delta.
-    net := v.currentVector()
-    if net == 0 {
-        v.tryMu.Unlock()
-        return
-    }
-    // Magnitude we can safely commit is limited by the current net, and we must
-    // move towards zero with the sign of the current net (not the possibly-stale input).
-    mag := abs(committedVector)
-    if mag > abs(net) {
-        mag = abs(net)
-    }
-    var delta int64
-    if net > 0 {
-        delta = mag // commit positive towards reducing a positive net
-    } else {
-        delta = -mag // commit negative towards reducing a negative net
-    }
-    // Apply: decrease scalar by |delta| and increase committedOffset by delta.
-    v.scalar.Add(-abs(delta))
-    v.committedOffset.Add(delta)
-    // Keep the approximate net consistent with the new committed offset
-    v.approxNet.Add(-delta)
-    v.tryMu.Unlock()
+	if committedVector == 0 {
+		return
+	}
+	// Serialize with TryConsume/TryRefund so the gate observes a consistent
+	// (S, committedOffset) pair relative to the subsequent in-memory update.
+	// IMPORTANT: The vector provided may be stale by the time we commit due to
+	// concurrent TryConsume/TryRefund. To preserve the availability invariant
+	// A = S - |net| across commits under concurrency, we recompute the current
+	// effective net and only commit up to its magnitude, in the net's direction.
+	v.tryMu.Lock()
+	// Recompute current net under the lock to derive a safe, aligned delta.
+	net := v.currentVector()
+	if net == 0 {
+		v.tryMu.Unlock()
+		return
+	}
+	// Magnitude we can safely commit is limited by the current net, and we must
+	// move towards zero with the sign of the current net (not the possibly-stale input).
+	mag := abs(committedVector)
+	if mag > abs(net) {
+		mag = abs(net)
+	}
+	var delta int64
+	if net > 0 {
+		delta = mag // commit positive towards reducing a positive net
+	} else {
+		delta = -mag // commit negative towards reducing a negative net
+	}
+	// Apply: decrease scalar by |delta| and increase committedOffset by delta.
+	v.scalar.Add(-abs(delta))
+	v.committedOffset.Add(delta)
+	// Keep the approximate net consistent with the new committed offset
+	v.approxNet.Add(-delta)
+	v.tryMu.Unlock()
 }
 
 // TryConsume atomically checks whether at least n units are available and, if so,
